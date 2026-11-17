@@ -1,1 +1,1 @@
-{"main":{"identifier":"main","description":"The main window may invoke application commands only; no filesystem or shell capability is granted.","local":true,"windows":["main"],"permissions":[]}}
+{"main":{"identifier":"main","description":"The main window may invoke application commands only; no filesystem or shell capability is granted.","local":true,"windows":["main","quick-panel"],"permissions":["core:event:allow-listen","core:event:allow-unlisten"]}}

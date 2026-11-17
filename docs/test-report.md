@@ -21,7 +21,7 @@ FAIL / PARTIAL / BLOCKED / NOT APPLICABLE.
 | Migration adapters | `tests/import_formats.rs` | PASS | 12 tests: Google migration batches, Aegis/2FAS/andOTP field mapping + defaults, steam rejection, duplicate classification, transactional commit, encrypted-format rejection with and without password |
 | Frontend tests | `pnpm test -- --run` | PASS | 5 files, 11 tests passed |
 | TypeScript | `pnpm exec tsc --noEmit` | PASS | no errors |
-| Desktop build | `cargo check --features desktop` / `pnpm tauri build` | PARTIAL | `cargo test` (default features) is green; full `pnpm tauri build` bundling evidence is tracked in Task 9 acceptance and not yet recorded in this report |
+| Desktop build | `cargo check --features desktop` / `pnpm tauri build` | PASS | release build compiles the desktop entry point and produces both NSIS (3,592,529 bytes) and MSI (5,095,424 bytes) bundles; install/launch evidence in `acceptance-checklist.md` |
 
 ## Coverage notes
 
@@ -31,8 +31,13 @@ FAIL / PARTIAL / BLOCKED / NOT APPLICABLE.
   contain only public demo secrets, and were generated for this repository;
   provenance is recorded in `migration-format-matrix.md`.
 - The desktop feature (tray, hotkeys, autostart, notifications) compiles and
-  its commands are covered by `tests/desktop.rs`; interactive Windows
-  behavior (tray click, global shortcut, Toast notification) still requires
-  the Task 9 packaged-app evidence run.
-- Not covered yet: installer verification, upgrade path, signing — tracked
-  in `docs/acceptance-checklist.md` once Task 9 executes.
+  its commands are covered by `tests/desktop.rs`; the packaged app installed,
+  launched, created a vault, generated a live TOTP, and completed lock,
+  uninstall, and reinstall-preservation cycles (see
+  `acceptance-checklist.md`). Interactive tray-click and global-shortcut
+  behavior remains validated only by the command surface in
+  `tests/desktop.rs`.
+- Installer verification (silent install, launch, uninstall, data
+  preservation across reinstall) was executed with
+  `scripts/verify-install.ps1`; upgrade path and signing remain BLOCKED /
+  NOT APPLICABLE without prior releases or a signing identity.

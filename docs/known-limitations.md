@@ -32,9 +32,11 @@ should be assumed not implemented.
   verification. Installer and upgrade evidence is pending the Task 9
   acceptance run; absence of that evidence means those claims are not made.
 - Global shortcuts, tray interactions, autostart, and notifications compile
-  and are registered behind the `desktop` feature, but interactive Windows
-  validation (click behavior, shortcut conflicts, Toast delivery) still
-  requires the packaged-app evidence run in Task 9.
+  and are registered behind the `desktop` feature. The packaged app was
+  verified for install, launch, vault creation, code generation, lock,
+  uninstall, and data preservation (`acceptance-checklist.md`); interactive
+  tray-click, global-shortcut conflict, and Toast delivery behavior remain
+  validated only through the command surface in `tests/desktop.rs`.
 
 ## Backup constraints
 
