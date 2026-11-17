@@ -15,8 +15,8 @@ pub const DEFAULT_MEMORY_KIB: u32 = 64 * 1024;
 pub const DEFAULT_TIME_COST: u32 = 3;
 pub const DEFAULT_LANES: u32 = 1;
 pub const MIN_MEMORY_KIB: u32 = 8 * 1024;
-pub const MAX_MEMORY_KIB: u32 = 1024 * 1024;
-pub const MAX_TIME_COST: u32 = 16;
+pub const MAX_MEMORY_KIB: u32 = 256 * 1024;
+pub const MAX_TIME_COST: u32 = 10;
 pub const MAX_LANES: u32 = 16;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -188,6 +188,16 @@ mod tests {
         let mut tampered = encoded;
         tampered[6..10].copy_from_slice(&1u32.to_le_bytes());
         assert!(KdfHeader::decode(&tampered).is_err());
+    }
+
+    #[test]
+    fn rejects_resource_exhaustion_kdf_headers() {
+        let mut header = KdfHeader::new_default().unwrap();
+        header.memory_kib = 1024 * 1024;
+        assert!(header.validate().is_err());
+        header.memory_kib = 64 * 1024;
+        header.time_cost = 16;
+        assert!(header.validate().is_err());
     }
 
     #[test]

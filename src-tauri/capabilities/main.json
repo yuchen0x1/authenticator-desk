@@ -2,6 +2,6 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
   "description": "The main window may invoke application commands only; no filesystem or shell capability is granted.",
-  "windows": ["main"],
-  "permissions": []
+  "windows": ["main", "quick-panel"],
+  "permissions": ["core:event:allow-listen", "core:event:allow-unlisten"]
 }
