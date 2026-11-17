@@ -40,7 +40,7 @@ impl SessionHandle {
         self.inner.invalidated.load(Ordering::Acquire)
     }
 
-    #[cfg(test)]
+    #[allow(dead_code)]
     pub(crate) fn key_copy(&self) -> AppResult<Zeroizing<[u8; 32]>> {
         self.inner
             .key

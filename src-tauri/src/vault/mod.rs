@@ -94,6 +94,10 @@ impl VaultService {
             .ok_or(AppError::NotFound)?;
         let session = unlock_vault_at(password, &path)?;
         let mut state = self.state.lock().map_err(|_| AppError::Storage)?;
+        if let Some(previous) = state.session.as_ref() {
+            previous.invalidate()?;
+        }
+        state.session = None;
         state.generation = state.generation.saturating_add(1);
         state.revision = state.revision.saturating_add(1);
         let session = SessionHandle::new(session, state.generation);
@@ -158,6 +162,44 @@ impl VaultService {
         }
         state.idle.touch();
         Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn encrypt_blob(
+        &self,
+        table: &str,
+        id: &str,
+        column: &str,
+        plaintext: &[u8],
+    ) -> AppResult<Vec<u8>> {
+        let state = self.state.lock().map_err(|_| AppError::Storage)?;
+        let session = state
+            .session
+            .as_ref()
+            .filter(|session| !session.is_invalidated())
+            .ok_or(AppError::VaultLocked)?;
+        let key = session.key_copy()?;
+        let aad = record_aad(table, id, column);
+        encrypt_record(&key, &aad, plaintext)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn decrypt_blob(
+        &self,
+        table: &str,
+        id: &str,
+        column: &str,
+        ciphertext: &[u8],
+    ) -> AppResult<Zeroizing<Vec<u8>>> {
+        let state = self.state.lock().map_err(|_| AppError::Storage)?;
+        let session = state
+            .session
+            .as_ref()
+            .filter(|session| !session.is_invalidated())
+            .ok_or(AppError::VaultLocked)?;
+        let key = session.key_copy()?;
+        let aad = record_aad(table, id, column);
+        Ok(Zeroizing::new(decrypt_record(&key, &aad, ciphertext)?))
     }
 
     pub fn set_idle_timeout(&self, timeout: Duration) -> AppResult<()> {
@@ -381,7 +423,7 @@ fn reencrypt_blob_rows(
     for row in rows {
         let (id, blob) = row.map_err(|_| AppError::Storage)?;
         let aad = record_aad(table, &id, blob_column);
-        let plaintext = decrypt_record(old_key, &aad, &blob)?;
+        let plaintext = Zeroizing::new(decrypt_record(old_key, &aad, &blob)?);
         let replacement = encrypt_record(new_key, &aad, &plaintext)?;
         replacements.push((id, replacement));
     }
@@ -518,6 +560,47 @@ mod tests {
         std::thread::sleep(Duration::from_millis(4));
         assert!(service.check_idle().unwrap());
         assert!(service.is_locked());
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn internal_record_helpers_encrypt_and_decrypt_only_when_unlocked() {
+        let path = temp_path("record-helpers");
+        create_vault(SecretString::from("record-password"), &path).unwrap();
+        let service = VaultService::new(Some(path.clone()));
+
+        assert!(matches!(
+            service.decrypt_blob("accounts", "account-1", "secret_blob", b""),
+            Err(crate::AppError::VaultLocked)
+        ));
+
+        service
+            .unlock_vault(SecretString::from("record-password"))
+            .unwrap();
+        let encrypted = service
+            .encrypt_blob("accounts", "account-1", "secret_blob", b"internal-secret")
+            .unwrap();
+        let decrypted = service
+            .decrypt_blob("accounts", "account-1", "secret_blob", &encrypted)
+            .unwrap();
+        assert_eq!(decrypted.as_slice(), b"internal-secret");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn duplicate_unlock_invalidates_the_previous_session() {
+        let path = temp_path("duplicate-unlock");
+        create_vault(SecretString::from("unlock-password"), &path).unwrap();
+        let service = VaultService::new(Some(path.clone()));
+        let first = service
+            .unlock_vault(SecretString::from("unlock-password"))
+            .unwrap();
+        let second = service
+            .unlock_vault(SecretString::from("unlock-password"))
+            .unwrap();
+
+        assert!(first.is_invalidated());
+        assert!(!second.is_invalidated());
         let _ = fs::remove_file(path);
     }
 }

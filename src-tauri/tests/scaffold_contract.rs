@@ -2,7 +2,9 @@ use authenticator_desk_lib::{AppError, AppSnapshot, AppState};
 
 #[test]
 fn starts_with_a_locked_vault_snapshot() {
-    let snapshot = AppState::default().snapshot().expect("snapshot is available");
+    let snapshot = AppState::default()
+        .snapshot()
+        .expect("snapshot is available");
 
     assert_eq!(
         snapshot,
@@ -57,6 +59,9 @@ fn serializes_only_stable_error_codes_and_safe_messages() {
 
     for (error, code, message) in cases {
         let payload = serde_json::to_value(error).expect("application errors serialize");
-        assert_eq!(payload, serde_json::json!({ "code": code, "message": message }));
+        assert_eq!(
+            payload,
+            serde_json::json!({ "code": code, "message": message })
+        );
     }
 }
