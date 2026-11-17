@@ -41,6 +41,30 @@ impl SecretBytes {
     }
 }
 
+/// Encode RFC 4648 Base32 without padding.
+///
+/// Used to normalize binary secrets (for example Google Authenticator
+/// migration payloads) into the canonical unpadded form the vault stores.
+pub fn encode_base32(bytes: &[u8]) -> Zeroizing<String> {
+    const ALPHABET: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    let mut output = Zeroizing::new(String::with_capacity(bytes.len() * 8 / 5 + 5));
+    let mut buffer = 0u16;
+    let mut bits = 0u8;
+    for byte in bytes {
+        buffer = (buffer << 8) | u16::from(*byte);
+        bits += 8;
+        while bits >= 5 {
+            bits -= 5;
+            output.push(ALPHABET[((buffer >> bits) & 0x1f) as usize] as char);
+            buffer &= (1u16 << bits).saturating_sub(1);
+        }
+    }
+    if bits > 0 {
+        output.push(ALPHABET[(buffer << (5 - bits) & 0x1f) as usize] as char);
+    }
+    output
+}
+
 fn value_of(byte: u8) -> Option<u8> {
     match byte {
         b'A'..=b'Z' => Some(byte - b'A'),

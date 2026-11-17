@@ -1,6 +1,6 @@
 import { invoke, isTauri, type InvokeArgs } from "@tauri-apps/api/core";
 import type { AccountDetails,AccountInput,AccountQuery,AccountView,AppSettings,AuditEvent,CategoryView,CodeView,Dashboard,ImportPreview,PlatformTemplate } from "./types";
-import { accountCreateSchema,accountInputSchema,importTextSchema } from "./schemas";
+import { accountCreateSchema,accountInputSchema,importFileSchema,importTextSchema } from "./schemas";
 
 export class TauriUnavailableError extends Error {
   readonly code = "backend_unavailable";
@@ -30,6 +30,6 @@ export const vaultCommands = {
 export const categoryCommands = {list:()=>tauriInvoke<CategoryView[]>("list_categories"),save:(id:string|null,name:string,color:string)=>tauriInvoke<CategoryView>("save_category",{id,name,color}),remove:(id:string)=>tauriInvoke<void>("delete_category",{id})};
 export const settingsCommands = {get:()=>tauriInvoke<AppSettings>("settings"),save:(settings:AppSettings)=>tauriInvoke<void>("save_settings",{settings})};
 export const activityCommands = {events:(limit=100)=>tauriInvoke<AuditEvent[]>("audit_events",{limit}),recordCopy:(accountId:string)=>tauriInvoke<void>("record_copy",{accountId}),dashboard:()=>tauriInvoke<Dashboard>("dashboard"),touch:()=>tauriInvoke<void>("activity_touch")};
-export const importCommands = {preview:(text:string)=>tauriInvoke<ImportPreview>("preview_import",{text:importTextSchema.parse(text)}),commit:(previewId:string,selection:number[])=>tauriInvoke<number>("commit_import",{previewId,selection})};
+export const importCommands = {preview:(text:string)=>tauriInvoke<ImportPreview>("preview_import",{text:importTextSchema.parse(text)}),previewFile:(payloadB64:string)=>tauriInvoke<ImportPreview>("preview_import_file",{payloadB64:importFileSchema.parse(payloadB64)}),commit:(previewId:string,selection:number[])=>tauriInvoke<number>("commit_import",{previewId,selection})};
 export const platformTemplates = ()=>tauriInvoke<PlatformTemplate[]>("platform_templates");
 export const changeMasterPassword = (current:string,next:string)=>tauriInvoke<void>("change_password",{current,next});

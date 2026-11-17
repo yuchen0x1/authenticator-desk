@@ -1,0 +1,2 @@
+otpauth://totp/Demo:carol@example.com?secret=GEZDGNBVGY3TQOJQ&issuer=Demo
+not-an-otpauth-uri

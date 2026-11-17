@@ -3,6 +3,70 @@ use std::collections::HashMap;
 use url::Url;
 use zeroize::Zeroizing;
 
+use super::{MigrationItem, MigrationPreview};
+
+/// Reader for plain newline-separated `otpauth://` lists, the shape of an
+/// Ente Auth plaintext export and of generic URI dumps.
+pub struct OtpAuthListAdapter;
+
+impl OtpAuthListAdapter {
+    pub const NAME: &'static str = "otpauth_list";
+
+    pub fn detect(&self, bytes: &[u8]) -> bool {
+        let Ok(text) = std::str::from_utf8(bytes) else {
+            return false;
+        };
+        text.lines()
+            .filter(|line| !line.trim().is_empty())
+            .next()
+            .is_some_and(|line| line.trim_start().starts_with("otpauth://"))
+    }
+
+    pub fn preview(&self, bytes: &[u8]) -> AppResult<MigrationPreview> {
+        let text = std::str::from_utf8(bytes).map_err(|_| AppError::InvalidInput)?;
+        let lines: Vec<&str> = text
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .collect();
+        if lines.is_empty() || lines.len() > 1000 {
+            return Err(AppError::InvalidInput);
+        }
+        let items = lines
+            .iter()
+            .map(|line| match parse_otpauth(line.trim()) {
+                Ok(input) => MigrationItem {
+                    issuer: Some(input.issuer.clone()),
+                    account_name: Some(input.account_name.clone()),
+                    input: Some(input),
+                    error_code: None,
+                },
+                Err(_) => MigrationItem {
+                    input: None,
+                    issuer: None,
+                    account_name: None,
+                    error_code: Some("invalid_otpauth".into()),
+                },
+            })
+            .collect();
+        Ok(MigrationPreview {
+            format: Self::NAME.into(),
+            items,
+        })
+    }
+}
+
+impl super::MigrationAdapter for OtpAuthListAdapter {
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
+    fn detect(&self, bytes: &[u8]) -> bool {
+        OtpAuthListAdapter::detect(self, bytes)
+    }
+    fn preview(&self, bytes: &[u8], _password: Option<&crate::vault::SecretString>) -> AppResult<MigrationPreview> {
+        OtpAuthListAdapter::preview(self, bytes)
+    }
+}
+
 pub fn parse_otpauth(uri: &str) -> AppResult<AccountInput> {
     if uri.len() > 16384 || uri.bytes().any(|b| b.is_ascii_control()) {
         return Err(AppError::InvalidInput);

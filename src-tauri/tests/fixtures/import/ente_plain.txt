@@ -1,0 +1,2 @@
+otpauth://totp/Demo:alice@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Demo
+otpauth://hotp/Demo:bob@example.com?secret=GEZDGNBVGY3TQOJQ&counter=4&issuer=Demo

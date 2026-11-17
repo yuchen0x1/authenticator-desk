@@ -21,3 +21,5 @@ export const accountCreateSchema = accountInputSchema.extend({
 });
 
 export const importTextSchema = z.string().min(1).max(2 * 1024 * 1024);
+// Base64 inflates the 2 MiB raw file bound by exactly 4/3.
+export const importFileSchema = z.string().min(1).max(2800000);

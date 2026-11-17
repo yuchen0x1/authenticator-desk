@@ -241,6 +241,15 @@ pub fn preview_import(
 }
 #[cfg(feature = "desktop")]
 #[tauri::command]
+pub fn preview_import_file(
+    state: tauri::State<'_, AppState>,
+    payload_b64: String,
+) -> AppResult<crate::import::ImportPreview> {
+    let payload = crate::import::base64::decode_base64(&payload_b64)?;
+    state.imports.preview_file(payload.to_vec())
+}
+#[cfg(feature = "desktop")]
+#[tauri::command]
 pub fn commit_import(
     state: tauri::State<'_, AppState>,
     preview_id: String,

@@ -180,6 +180,7 @@ pub fn run() {
             commands::dashboard,
             commands::platform_templates,
             commands::preview_import,
+            commands::preview_import_file,
             commands::commit_import,
             commands::activity_touch,
             commands::change_password,

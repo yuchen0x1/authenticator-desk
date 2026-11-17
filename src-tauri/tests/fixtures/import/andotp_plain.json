@@ -1,0 +1,32 @@
+[
+  {
+    "secret": "JBSWY3DPEHPK3PXP",
+    "issuer": "Demo",
+    "label": "alice@example.com",
+    "digits": 6,
+    "type": "TOTP",
+    "algorithm": "SHA1",
+    "period": 30,
+    "tags": [
+      "work",
+      "imported"
+    ]
+  },
+  {
+    "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+    "issuer": "Demo",
+    "label": "bob@example.com",
+    "digits": 6,
+    "type": "HOTP",
+    "algorithm": "SHA256",
+    "counter": 9
+  },
+  {
+    "secret": "JBSWY3DPEHPK3PXP",
+    "issuer": "Steam",
+    "label": "steam@example.com",
+    "digits": 5,
+    "type": "STEAM",
+    "algorithm": "SHA1"
+  }
+]

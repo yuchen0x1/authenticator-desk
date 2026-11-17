@@ -2,7 +2,34 @@
 
 AUTHENTICATOR DESK is an offline-first Windows desktop authenticator built with Tauri 2, Rust, React, TypeScript, Tailwind CSS, and SQLite.
 
-This repository currently contains the secure application scaffold: a locked desktop shell, a typed frontend-to-Rust command boundary, safe error payloads, and the initial migration surface. Account and vault workflows are intentionally unavailable until their secure backend services are implemented.
+The Rust core owns an encrypted SQLite vault (Argon2id + AES-256-GCM), a
+verified TOTP/HOTP engine (RFC 4226/6238 vectors), otpauth URI parsing,
+encrypted `.authdesk` backups with restore previews, a security audit, and
+clipboard protection. The React UI receives only typed, redacted view
+models. The desktop shell ships tray, hotkey, autostart, and notification
+integrations behind the `desktop` feature.
+
+## Import and migration
+
+- Textarea paste and file import both route through the same
+  preview → select → transactional commit flow; secrets never leave the
+  Rust core during preview.
+- Supported readers: plain `otpauth://` lists (including Ente plaintext
+  exports), Google Authenticator migration URIs, Aegis plain JSON, 2FAS
+  plain JSON (schema 1–4), and andOTP plain JSON.
+- Encrypted Aegis/2FAS/andOTP/Ente backups and FreeOTP backups are detected
+  and rejected with `unsupported_encrypted_format`; no bypass is attempted.
+  See [docs/migration-format-matrix.md](docs/migration-format-matrix.md).
+
+## Documentation
+
+- [docs/security-model.md](docs/security-model.md) — trust boundaries,
+  cryptography, lifecycle, and network posture
+- [docs/migration-format-matrix.md](docs/migration-format-matrix.md) —
+  per-format field contracts, fixture provenance, and license notes
+- [docs/test-report.md](docs/test-report.md) — observed verification results
+- [docs/known-limitations.md](docs/known-limitations.md) — what this release
+  does not claim
 
 ## Development
 
@@ -18,13 +45,11 @@ pnpm install
 pnpm dev
 ```
 
-The browser shell explicitly reports that the desktop security backend is unavailable. Run the desktop application for Tauri IPC after the packaging icon is supplied:
+The browser shell explicitly reports that the desktop security backend is unavailable. Run the desktop application for full Tauri IPC:
 
 ```powershell
 pnpm tauri dev
 ```
-
-The current scaffold intentionally leaves Windows bundling disabled until `src-tauri/icons/icon.ico` and the remaining packaging metadata are supplied in Task 9. Browser-shell tests and core Rust tests do not require that asset.
 
 ## Verification
 
@@ -40,7 +65,9 @@ The default Rust feature set tests core code without linking the desktop runtime
 
 ## Data location
 
-Production data will use Tauri's application data directory for `com.authenticatordesk.app`. A future backend-only `AUTHDESK_DATA_DIR` override may be used for isolated test vaults; the frontend will never choose arbitrary storage paths.
+Production data lives in Tauri's application data directory. The backend
+accepts an `AUTHDESK_DATA_DIR` override so isolated test vaults can run
+elsewhere; the frontend never chooses arbitrary storage paths.
 
 ## License
 

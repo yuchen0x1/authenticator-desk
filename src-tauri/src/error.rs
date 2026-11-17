@@ -21,6 +21,8 @@ pub enum AppError {
     NotFound,
     #[error("invalid parameters")]
     InvalidParameters,
+    #[error("unsupported encrypted format")]
+    UnsupportedEncryptedFormat,
 }
 
 #[derive(Serialize)]
@@ -63,6 +65,10 @@ impl AppError {
             Self::InvalidParameters => SafeErrorPayload {
                 code: "invalid_parameters",
                 message: "The requested parameters are invalid.",
+            },
+            Self::UnsupportedEncryptedFormat => SafeErrorPayload {
+                code: "unsupported_encrypted_format",
+                message: "This encrypted backup cannot be imported in this release.",
             },
         }
     }

@@ -12,5 +12,5 @@ export interface AuditEvent {id:number;event_type:string;account_id:string|null;
 export interface Dashboard {account_count:number;category_count:number;favorite_count:number;copies_today:number;recent_accounts:AccountView[]}
 export interface AppSettings {locale:string;theme:string;idle_timeout_secs:number;clipboard_ttl_secs:number;hide_codes:boolean;view_mode:string;animations:boolean;compact:boolean;font_size:number;default_algorithm:OtpAlgorithm;default_digits:number;default_period_secs:number;close_to_tray:boolean;minimize_to_tray:boolean;startup:boolean;backup_enabled:boolean;backup_interval_hours:number;backup_retention:number;show_next_code:boolean}
 export interface ImportItem {index:number;issuer:string|null;account_name:string|null;status:"new"|"duplicate"|"invalid";error_code:string|null}
-export interface ImportPreview {preview_id:string;items:ImportItem[]}
+export interface ImportPreview {preview_id:string;format:string;items:ImportItem[]}
 export interface PlatformTemplate {issuer:string;icon:string;category:string;help_key:string}

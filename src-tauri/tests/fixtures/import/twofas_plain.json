@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 4,
+  "app": {
+    "appVersionName": "synthetic-fixture",
+    "appPlatform": "Android"
+  },
+  "services": [
+    {
+      "name": "Demo",
+      "secret": "JBSWY3DPEHPK3PXP",
+      "otp": {
+        "label": "Demo",
+        "account": "alice@example.com",
+        "issuer": "Demo",
+        "digits": null,
+        "period": null,
+        "algorithm": null,
+        "counter": null,
+        "tokenType": "TOTP"
+      },
+      "groupId": null,
+      "order": null
+    },
+    {
+      "name": "Demo HOTP",
+      "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "otp": {
+        "label": "Demo HOTP:bob@example.com",
+        "account": "bob@example.com",
+        "issuer": "Demo HOTP",
+        "digits": 8,
+        "period": 60,
+        "algorithm": "SHA512",
+        "counter": 3,
+        "tokenType": "HOTP"
+      },
+      "groupId": null,
+      "order": null
+    },
+    {
+      "name": "Steam",
+      "secret": "JBSWY3DPEHPK3PXP",
+      "otp": {
+        "label": "Steam",
+        "account": "steam@example.com",
+        "issuer": "Steam",
+        "digits": 5,
+        "period": 30,
+        "algorithm": "SHA1",
+        "counter": null,
+        "tokenType": "Steam"
+      },
+      "groupId": null,
+      "order": null
+    }
+  ],
+  "groups": []
+}

@@ -3,7 +3,7 @@ mod hotp;
 mod time;
 mod totp;
 
-pub use base32::{SecretBytes, decode_base32};
+pub use base32::{SecretBytes, decode_base32, encode_base32};
 pub use time::{ClockSample, MonotonicClock, TimeState, time_state, time_state_with_offset};
 
 use crate::{AppError, AppResult};

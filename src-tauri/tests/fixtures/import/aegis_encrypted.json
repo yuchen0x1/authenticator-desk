@@ -1,0 +1,1 @@
+{"version": 1, "header": {"slots": [{"type": 1, "uuid": "slot", "key": "", "key_params": null, "rebuild": false}], "params": {"encryption": "AES/GCM/NoPadding", "key_size_bits": 256}}, "db": {"version": 1, "entries": [], "groups": []}}

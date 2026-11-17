@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "header": {
+    "slots": null,
+    "params": null
+  },
+  "db": {
+    "version": 1,
+    "entries": [
+      {
+        "type": "totp",
+        "uuid": "0aa54f5e-e00c-4b7a-bec7-e421a2c1a1f0",
+        "name": "alice@example.com",
+        "issuer": "Demo",
+        "info": {
+          "secret": "JBSWY3DPEHPK3PXP",
+          "algo": "SHA1",
+          "digits": 6,
+          "period": 30
+        }
+      },
+      {
+        "type": "totp",
+        "uuid": "1aa54f5e-e00c-4b7a-bec7-e421a2c1a1f0",
+        "name": "bob@example.com",
+        "issuer": "Demo",
+        "info": {
+          "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+          "algo": "SHA256",
+          "digits": 8,
+          "period": 60
+        }
+      },
+      {
+        "type": "hotp",
+        "uuid": "2aa54f5e-e00c-4b7a-bec7-e421a2c1a1f0",
+        "name": "carol@example.com",
+        "issuer": "Demo",
+        "info": {
+          "secret": "GEZDGNBVGY3TQOJQ",
+          "algo": "SHA1",
+          "digits": 6,
+          "counter": 7
+        }
+      },
+      {
+        "type": "steam",
+        "uuid": "3aa54f5e-e00c-4b7a-bec7-e421a2c1a1f0",
+        "name": "steam@example.com",
+        "issuer": "Steam",
+        "info": {
+          "secret": "JBSWY3DPEHPK3PXP",
+          "algo": "SHA1",
+          "digits": 5,
+          "period": 30
+        }
+      }
+    ],
+    "groups": []
+  }
+}
