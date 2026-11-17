@@ -1,6 +1,6 @@
-
 pub mod commands;
 mod error;
+pub mod otp;
 pub mod services;
 
 use std::sync::RwLock;
@@ -35,7 +35,10 @@ impl Default for AppState {
 
 impl AppState {
     pub fn snapshot(&self) -> AppResult<AppSnapshot> {
-        self.snapshot.read().map(|snapshot| snapshot.clone()).map_err(|_| AppError::Storage)
+        self.snapshot
+            .read()
+            .map(|snapshot| snapshot.clone())
+            .map_err(|_| AppError::Storage)
     }
 }
 
