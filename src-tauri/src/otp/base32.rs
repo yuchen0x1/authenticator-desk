@@ -26,7 +26,10 @@ impl SecretBytes {
 
     pub fn from_base32(encoded: &str) -> AppResult<Self> {
         let bytes = decode_base32(encoded)?;
-        Self::from_bytes(&bytes)
+        if bytes.is_empty() || bytes.len() > MAX_SECRET_BYTES {
+            return Err(AppError::InvalidParameters);
+        }
+        Ok(Self(bytes))
     }
 
     pub(crate) fn as_slice(&self) -> &[u8] {
@@ -50,7 +53,7 @@ fn value_of(byte: u8) -> Option<u8> {
 ///
 /// Padding is optional, but when present it must be terminal and canonical.
 /// Lowercase, whitespace, and non-zero unused bits are rejected deliberately.
-pub fn decode_base32(encoded: &str) -> AppResult<Vec<u8>> {
+pub fn decode_base32(encoded: &str) -> AppResult<Zeroizing<Vec<u8>>> {
     if encoded.is_empty() || encoded.len() > (MAX_SECRET_BYTES * 8).div_ceil(5) + 7 {
         return Err(AppError::InvalidInput);
     }
@@ -89,7 +92,7 @@ pub fn decode_base32(encoded: &str) -> AppResult<Vec<u8>> {
         return Err(AppError::InvalidParameters);
     }
 
-    let mut output = Vec::with_capacity(decoded_len);
+    let mut output = Zeroizing::new(Vec::with_capacity(decoded_len));
     let mut buffer = 0u16;
     let mut bits = 0u8;
     for byte in &bytes[..data] {
@@ -116,13 +119,16 @@ mod tests {
 
     #[test]
     fn decodes_rfc4648_vectors_without_padding() {
-        assert_eq!(decode_base32("MY======").unwrap(), b"f");
-        assert_eq!(decode_base32("MZXQ====").unwrap(), b"fo");
-        assert_eq!(decode_base32("MZXW6===").unwrap(), b"foo");
-        assert_eq!(decode_base32("MZXW6YQ=").unwrap(), b"foob");
-        assert_eq!(decode_base32("MZXW6YTB").unwrap(), b"fooba");
-        assert_eq!(decode_base32("MZXW6YTBOI======").unwrap(), b"foobar");
-        assert_eq!(decode_base32("MZXW6YTBOI").unwrap(), b"foobar");
+        assert_eq!(decode_base32("MY======").unwrap().as_slice(), b"f");
+        assert_eq!(decode_base32("MZXQ====").unwrap().as_slice(), b"fo");
+        assert_eq!(decode_base32("MZXW6===").unwrap().as_slice(), b"foo");
+        assert_eq!(decode_base32("MZXW6YQ=").unwrap().as_slice(), b"foob");
+        assert_eq!(decode_base32("MZXW6YTB").unwrap().as_slice(), b"fooba");
+        assert_eq!(
+            decode_base32("MZXW6YTBOI======").unwrap().as_slice(),
+            b"foobar"
+        );
+        assert_eq!(decode_base32("MZXW6YTBOI").unwrap().as_slice(), b"foobar");
     }
 
     #[test]
