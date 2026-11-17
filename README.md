@@ -18,11 +18,13 @@ pnpm install
 pnpm dev
 ```
 
-The browser shell explicitly reports that the desktop security backend is unavailable. Run the desktop application for Tauri IPC:
+The browser shell explicitly reports that the desktop security backend is unavailable. Run the desktop application for Tauri IPC after the packaging icon is supplied:
 
 ```powershell
 pnpm tauri dev
 ```
+
+The current scaffold intentionally leaves Windows bundling disabled until `src-tauri/icons/icon.ico` and the remaining packaging metadata are supplied in Task 9. Browser-shell tests and core Rust tests do not require that asset.
 
 ## Verification
 
@@ -34,7 +36,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 cargo check --manifest-path src-tauri/Cargo.toml --features desktop --bin authenticator-desk
 ```
 
-The default Rust feature set tests core code without linking the desktop runtime. The `desktop` feature builds the real Tauri entry point. The main capability grants no filesystem or shell permissions.
+The default Rust feature set tests core code without linking the desktop runtime. The `desktop` feature builds the real Tauri entry point when packaging metadata and the Windows icon are present. The main capability grants no filesystem or shell permissions.
 
 ## Data location
 
