@@ -199,7 +199,7 @@ impl VaultService {
             .ok_or(AppError::VaultLocked)?;
         let key = session.key_copy()?;
         let aad = record_aad(table, id, column);
-        Ok(Zeroizing::new(decrypt_record(&key, &aad, ciphertext)?))
+        decrypt_record(&key, &aad, ciphertext)
     }
 
     pub fn set_idle_timeout(&self, timeout: Duration) -> AppResult<()> {
@@ -333,7 +333,7 @@ fn unlock_vault_at(password: SecretString, path: &Path) -> AppResult<Zeroizing<[
         .map_err(|_| AppError::AuthenticationFailed)?;
     let marker = decrypt_record(&key, CHECK_AAD, &verification)
         .map_err(|_| AppError::AuthenticationFailed)?;
-    if marker != CHECK_VALUE {
+    if marker.as_slice() != CHECK_VALUE {
         return Err(AppError::AuthenticationFailed);
     }
     Ok(key)
@@ -423,7 +423,7 @@ fn reencrypt_blob_rows(
     for row in rows {
         let (id, blob) = row.map_err(|_| AppError::Storage)?;
         let aad = record_aad(table, &id, blob_column);
-        let plaintext = Zeroizing::new(decrypt_record(old_key, &aad, &blob)?);
+        let plaintext = decrypt_record(old_key, &aad, &blob)?;
         let replacement = encrypt_record(new_key, &aad, &plaintext)?;
         replacements.push((id, replacement));
     }
@@ -536,7 +536,9 @@ mod tests {
         assert_ne!(stored, secret_blob);
         assert!(decrypt_record(&old_key, &secret_aad, &stored).is_err());
         assert_eq!(
-            decrypt_record(&new_key, &secret_aad, &stored).unwrap(),
+            decrypt_record(&new_key, &secret_aad, &stored)
+                .unwrap()
+                .as_slice(),
             b"super-secret-token"
         );
         let bytes = fs::read(&path).unwrap();

@@ -1,4 +1,6 @@
+use authenticator_desk_lib::vault::{SecretString, create_vault};
 use authenticator_desk_lib::{AppError, AppSnapshot, AppState};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
 fn starts_with_a_locked_vault_snapshot() {
@@ -15,6 +17,35 @@ fn starts_with_a_locked_vault_snapshot() {
             theme: "dark".to_owned(),
         }
     );
+}
+
+#[test]
+fn startup_binds_existing_vault_from_backend_app_data_dir() {
+    let suffix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let app_data_dir = std::env::temp_dir().join(format!("authdesk-startup-{suffix}"));
+    std::fs::create_dir_all(&app_data_dir).unwrap();
+    create_vault(
+        SecretString::from("startup-password"),
+        &app_data_dir.join("vault.sqlite3"),
+    )
+    .unwrap();
+
+    let restarted = AppState::default();
+    restarted.bind_app_data_dir(&app_data_dir).unwrap();
+    assert!(restarted.snapshot().unwrap().vault_exists);
+    assert!(restarted.vault.status().exists);
+    assert!(restarted.vault.status().locked);
+    assert!(restarted.vault.integrity_check().unwrap().ok);
+    restarted
+        .vault
+        .unlock_vault(SecretString::from("startup-password"))
+        .unwrap();
+    assert!(!restarted.snapshot().unwrap().locked);
+    restarted.vault.lock_vault().unwrap();
+    let _ = std::fs::remove_dir_all(app_data_dir);
 }
 
 #[test]

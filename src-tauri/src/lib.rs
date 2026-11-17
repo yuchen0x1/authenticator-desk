@@ -5,7 +5,11 @@ pub mod services;
 pub mod storage;
 pub mod vault;
 
+use std::path::Path;
 use std::sync::{Arc, RwLock};
+
+#[cfg(feature = "desktop")]
+use tauri::Manager;
 
 pub use error::{AppError, AppResult};
 use serde::Serialize;
@@ -38,10 +42,23 @@ impl Default for AppState {
 }
 
 impl AppState {
+    pub fn bind_app_data_dir(&self, app_data_dir: &Path) -> AppResult<()> {
+        self.vault
+            .configure_path(commands::resolve_vault_path(app_data_dir))
+    }
+
     pub fn snapshot(&self) -> AppResult<AppSnapshot> {
         self.snapshot
             .read()
-            .map(|snapshot| snapshot.clone())
+            .map(|snapshot| {
+                let status = self.vault.status();
+                AppSnapshot {
+                    locked: status.locked,
+                    vault_exists: status.exists,
+                    locale: snapshot.locale.clone(),
+                    theme: snapshot.theme.clone(),
+                }
+            })
             .map_err(|_| AppError::Storage)
     }
 
@@ -58,6 +75,11 @@ impl AppState {
 pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
+        .setup(|app| {
+            let app_data_dir = app.path().app_data_dir()?;
+            app.state::<AppState>().bind_app_data_dir(&app_data_dir)?;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::app_snapshot,
             commands::create_vault,
