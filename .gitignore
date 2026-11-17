@@ -1,1 +1,13 @@
 .worktrees/
+node_modules/
+dist/
+src-tauri/target/
+.env
+.env.*
+*.db
+*.db-shm
+*.db-wal
+*.authdesk
+*.log
+.idea/
+.vscode/
