@@ -1,91 +1,47 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { getMessages, type Locale } from "./i18n";
+import { errorMessage } from "./i18n/errors";
+import { accountCommands, activityCommands, categoryCommands, settingsCommands, tauriInvoke, vaultCommands } from "./lib/tauri";
+import type { AccountInput, AccountView, AppSettings, AppSnapshot, CategoryView, CodeView } from "./lib/types";
+import { AccountDialog } from "./components/accounts/AccountDialog";
+import { AccountsPage } from "./pages/AccountsPage";
+import { ImportPage } from "./pages/ImportPage";
+import { SettingsPage } from "./pages/SettingsPage";
+import { CategoriesPage } from "./pages/CategoriesPage";
+import { DashboardPage } from "./pages/DashboardPage";
+import { ActivityPage } from "./pages/ActivityPage";
+import { BackupPage } from "./pages/BackupPage";
+import { SecurityPage } from "./pages/SecurityPage";
+import { AppShell, type Destination } from "./components/layout/AppShell";
 
-import { getMessages, type Messages } from "./i18n/resources";
-import { tauriInvoke } from "./lib/tauri";
-import type { AppSnapshot } from "./lib/types";
-
-type BackendState =
-  | { status: "checking" }
-  | { status: "ready"; snapshot: AppSnapshot }
-  | { status: "unavailable" };
-
-const navKeys: Array<keyof Messages["navigation"]["items"]> = [
-  "dashboard", "codes", "accounts", "favorites", "categories",
-  "import", "backup", "security", "activity", "settings",
-];
-
-function statusCopy(state: BackendState, messages: Messages) {
-  if (state.status === "checking") {
-    return { title: messages.status.checkingTitle, detail: messages.status.checkingDetail, tone: "text-sky-200 border-sky-400/25 bg-sky-400/8" };
-  }
-  if (state.status === "unavailable") {
-    return { title: messages.status.unavailableTitle, detail: messages.status.unavailableDetail, tone: "text-amber-100 border-amber-300/25 bg-amber-300/8" };
-  }
-  return {
-    title: state.snapshot.locked ? messages.status.lockedTitle : messages.status.readyTitle,
-    detail: state.snapshot.vault_exists ? messages.status.lockedDetail : messages.status.noVaultDetail,
-    tone: "text-violet-100 border-violet-300/25 bg-violet-300/8",
-  };
-}
+export const defaultSettings: AppSettings = { locale:"zh-CN",theme:"dark",idle_timeout_secs:900,clipboard_ttl_secs:30,hide_codes:false,view_mode:"cards",animations:true,compact:false,font_size:14,default_algorithm:"SHA1",default_digits:6,default_period_secs:30,close_to_tray:false,minimize_to_tray:false,startup:false,backup_enabled:false,backup_interval_hours:24,backup_retention:10,show_next_code:false };
+export type WorkspaceProps = { locale: Locale; accounts: AccountView[]; categories: CategoryView[]; codes: CodeView[]; settings: AppSettings; refresh: () => Promise<void>; notify: (message:string) => void; onError: (error:unknown) => void; onAdd: () => void; onEdit: (account:AccountView) => void; navigate: (page:Destination) => void; saveSettings: (value:AppSettings) => Promise<void> };
 
 export default function App() {
-  const [backend, setBackend] = useState<BackendState>({ status: "checking" });
-  const messages = getMessages(backend.status === "ready" ? backend.snapshot.locale : "zh-CN");
-  const status = statusCopy(backend, messages);
-
-  useEffect(() => {
-    let active = true;
-    tauriInvoke<AppSnapshot>("app_snapshot")
-      .then((snapshot) => { if (active) setBackend({ status: "ready", snapshot }); })
-      .catch(() => { if (active) setBackend({ status: "unavailable" }); });
-    return () => { active = false; };
-  }, []);
-
-  return (
-    <div className="min-h-screen bg-[#080b16] text-slate-100">
-      <div className="mx-auto grid min-h-screen max-w-[1500px] grid-cols-1 lg:grid-cols-[17rem_1fr]">
-        <aside className="border-b border-white/8 bg-[#0b1020] px-5 py-6 lg:border-r lg:border-b-0">
-          <div className="flex items-center gap-3 border-b border-white/8 pb-6">
-            <div aria-hidden="true" className="grid size-10 place-items-center rounded-xl border border-violet-300/30 bg-violet-400/10 text-sm font-semibold text-violet-100 shadow-[inset_0_0_24px_rgba(139,92,246,0.12)]">AD</div>
-            <div><p className="font-semibold tracking-[0.08em] text-white">AUTHENTICATOR</p><p className="text-sm text-slate-500">DESK</p></div>
-          </div>
-          <nav aria-label={messages.navigation.label} className="mt-6">
-            <ul className="grid grid-cols-2 gap-1 sm:grid-cols-5 lg:grid-cols-1">
-              {navKeys.map((key, index) => (
-                <li key={key}>
-                  <span
-                    aria-current={index === 0 ? "page" : undefined}
-                    aria-disabled={index === 0 ? undefined : true}
-                    className={`flex min-h-10 items-center rounded-lg px-3 text-sm ${index === 0 ? "bg-violet-400/12 font-medium text-violet-100 ring-1 ring-inset ring-violet-300/18" : "text-slate-500"}`}
-                  >{messages.navigation.items[key]}</span>
-                </li>
-              ))}
-            </ul>
-          </nav>
-        </aside>
-        <main className="flex min-w-0 flex-col">
-          <header className="flex flex-wrap items-center justify-between gap-4 border-b border-white/8 px-6 py-5 md:px-10">
-            <div><p className="text-sm text-slate-500">{messages.shell.workspace}</p><h1 className="mt-1 text-xl font-semibold tracking-tight text-white">AUTHENTICATOR DESK</h1></div>
-            <span className="rounded-full border border-white/10 bg-white/4 px-3 py-1.5 text-xs text-slate-400">{messages.shell.localOnly}</span>
-          </header>
-          <div className="grid flex-1 place-items-center px-6 py-12 md:px-10">
-            <section className="w-full max-w-3xl overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#0e1427] shadow-[0_28px_90px_rgba(0,0,0,0.38)]">
-              <div className="grid gap-8 p-7 md:grid-cols-[13rem_1fr] md:p-10">
-                <div className="grid place-items-center rounded-2xl border border-white/8 bg-[#090d1a] p-8">
-                  <div aria-hidden="true" className="grid aspect-square w-32 place-items-center rounded-full border border-violet-300/25 bg-violet-400/6 shadow-[inset_0_0_42px_rgba(124,58,237,0.14),0_0_60px_rgba(76,29,149,0.12)]">
-                    <div className="grid size-16 place-items-center rounded-2xl border border-violet-200/30 bg-[#11182d]"><div className="h-7 w-5 rounded-b-md rounded-t-full border-2 border-violet-200/70" /></div>
-                  </div>
-                </div>
-                <div className="self-center">
-                  <div role="status" aria-live="polite" className={`rounded-xl border px-4 py-3 ${status.tone}`}><h2 className="font-medium">{status.title}</h2><p className="mt-1 text-sm leading-6 opacity-80">{status.detail}</p></div>
-                  <p className="mt-7 text-sm leading-6 text-slate-400">{messages.shell.lockedExplanation}</p>
-                  <div className="mt-7 border-t border-white/8 pt-5 text-sm text-slate-500">{messages.shell.nextStep}</div>
-                </div>
-              </div>
-            </section>
-          </div>
-        </main>
-      </div>
-    </div>
-  );
+  const [snapshot,setSnapshot] = useState<AppSnapshot|null>(null); const [unavailable,setUnavailable] = useState(false); const [locale,setLocale] = useState<Locale>("zh-CN"); const [settings,setSettings] = useState<AppSettings>(defaultSettings); const [accounts,setAccounts] = useState<AccountView[]>([]); const [categories,setCategories] = useState<CategoryView[]>([]); const [codes,setCodes] = useState<CodeView[]>([]); const [page,setPage] = useState<Destination>("dashboard"); const [toast,setToast] = useState(""); const [error,setError] = useState(""); const [dialog,setDialog] = useState<AccountView|"new"|null>(null); const generation=useRef(0); const active=useRef(true); const snapshotRef=useRef(snapshot); const accountsRef=useRef(accounts); const busy=useRef(false); const lastTouch=useRef(0); const restoreFocus=useRef<HTMLElement|null>(null);
+  const t=getMessages(locale);
+  snapshotRef.current=snapshot; accountsRef.current=accounts;
+  const clearSensitive=useCallback(() => { generation.current++; setAccounts([]); setCodes([]); setCategories([]); setDialog(null); setToast(""); setSnapshot((old)=>old?{...old,locked:true}:old); },[]);
+  const fail=useCallback((reason:unknown)=>{ const code=(reason as {code?:string})?.code; if(code==="vault_locked")clearSensitive(); setError(errorMessage(locale,reason)); },[locale,clearSensitive]);
+  const notify=useCallback((message:string)=>setToast(message),[]);
+  useEffect(()=>{if(!toast)return;const handle=window.setTimeout(()=>setToast(""),2500);return()=>window.clearTimeout(handle);},[toast]);
+  const refresh=useCallback(async()=>{ if(snapshotRef.current?.locked)return; const token=generation.current; const [items,groups]=await Promise.all([accountCommands.list({search:"",favorite_only:false,sort:"manual"}),categoryCommands.list()]);if(active.current&&generation.current===token&&!snapshotRef.current?.locked){setAccounts(items);setCategories(groups);} },[]);
+  useEffect(()=>{ active.current=true;tauriInvoke<AppSnapshot>("app_snapshot").then(async(value)=>{if(!active.current)return;setSnapshot(value);snapshotRef.current=value;setLocale(value.locale as Locale);if(!value.locked){const valueSettings=await settingsCommands.get();if(!active.current)return;setSettings(valueSettings);setLocale(valueSettings.locale as Locale);await refresh();}}).catch(()=>{if(active.current)setUnavailable(true);});return()=>{active.current=false;generation.current++;};},[refresh]);
+  useEffect(()=>{let unlisten:(()=>void)|undefined;listen("vault://locked",clearSensitive).then((stop)=>{if(!active.current)stop();else unlisten=stop;}).catch(()=>{});return()=>unlisten?.();},[clearSensitive]);
+  useEffect(()=>{if(!snapshot||snapshot.locked)return;let cancelled=false;const tick=async()=>{if(busy.current)return;busy.current=true;const token=generation.current;try{const state=await vaultCommands.status();if(cancelled||token!==generation.current)return;if(state.locked){clearSensitive();return;}const values=await accountCommands.codes(accountsRef.current.map((item)=>item.id));if(!cancelled&&token===generation.current&&!snapshotRef.current?.locked)setCodes(values);}catch(reason){if(!cancelled)fail(reason);}finally{busy.current=false;}};void tick();const timer=window.setInterval(()=>void tick(),1000);const focus=()=>void tick();window.addEventListener("focus",focus);document.addEventListener("visibilitychange",focus);const activity=()=>{if(Date.now()-lastTouch.current>10000){lastTouch.current=Date.now();void activityCommands.touch().catch(fail);}};window.addEventListener("pointerdown",activity);window.addEventListener("keydown",activity);return()=>{cancelled=true;window.clearInterval(timer);window.removeEventListener("focus",focus);document.removeEventListener("visibilitychange",focus);window.removeEventListener("pointerdown",activity);window.removeEventListener("keydown",activity);};},[snapshot?.locked,clearSensitive,fail]);
+  async function lockedForm(password:string,create:boolean){setError("");if(create){await vaultCommands.create(password);}await vaultCommands.unlock(password);const value=await tauriInvoke<AppSnapshot>("app_snapshot");if(!active.current)return;generation.current++;setSnapshot(value);snapshotRef.current=value;const valueSettings=await settingsCommands.get();if(!active.current)return;setSettings(valueSettings);setLocale(valueSettings.locale as Locale);await refresh();}
+  async function lock(){clearSensitive();try{await vaultCommands.lock();}catch(reason){fail(reason);}}
+  function showDialog(item:AccountView|"new"){restoreFocus.current=document.activeElement as HTMLElement;setDialog(item);}
+  function closeDialog(){setDialog(null);restoreFocus.current?.focus();}
+  async function saveAccount(input:AccountInput){if(dialog==="new")await accountCommands.create(input);else if(dialog)await accountCommands.update(dialog.id,input);closeDialog();await refresh();notify(t.status.saved);}
+  async function saveSettings(value:AppSettings){await settingsCommands.save(value);setSettings(value);setLocale(value.locale as Locale);notify(getMessages(value.locale).status.saved);}
+  const props:WorkspaceProps={locale,accounts,categories,codes,settings,refresh,notify,onError:fail,onAdd:()=>showDialog("new"),onEdit:showDialog,navigate:setPage,saveSettings};
+  return <div data-theme={settings.theme} data-motion={settings.animations?"on":"off"} data-compact={settings.compact?"on":"off"} className="app-root"><AppShell locale={locale} page={page} locked={snapshot?.locked??true} onNavigate={setPage} onLock={()=>void lock()}>
+    {error&&<div role="alert" className="error-banner"><span>{error}</span><button onClick={()=>setError("")} aria-label={t.actions.cancel}>×</button></div>}
+    {!snapshot&&!unavailable?<div className="loading-state" role="status">{t.shell.checking}</div>:unavailable?<div className="vault-gate"><div className="vault-emblem">◇</div><h2>{t.shell.unavailableTitle}</h2><p>{t.shell.unavailable}</p></div>:snapshot?.locked?<VaultGate key={String(snapshot.vault_exists)} locale={locale} exists={snapshot.vault_exists} onSubmit={lockedForm} onError={fail}/>:<>{page==="dashboard"?<DashboardPage {...props}/>:page==="codes"||page==="accounts"||page==="favorites"?<AccountsPage {...props} mode={page}/>:page==="categories"?<CategoriesPage {...props}/>:page==="import"?<ImportPage {...props}/>:page==="backup"?<BackupPage {...props}/>:page==="security"?<SecurityPage {...props}/>:page==="activity"?<ActivityPage {...props}/>:<SettingsPage {...props}/>}</>}
+  </AppShell>{toast&&<div role="status" className="toast">✓ {toast}</div>}{dialog&&!snapshot?.locked&&<AccountDialog account={dialog==="new"?undefined:dialog} categories={categories} defaults={{algorithm:settings.default_algorithm,digits:settings.default_digits,period:settings.default_period_secs}} t={{...t.fields,...t.actions,...t.status,required:t.status.invalid,uncategorized:t.fields.uncategorized,secretPrivacy:t.pages.accountsHint,secretKeep:t.fields.secretKeep}} onClose={closeDialog} onSave={saveAccount}/>}</div>;
 }
+
+function VaultGate({locale,exists,onSubmit,onError}:{locale:Locale;exists:boolean;onSubmit:(password:string,create:boolean)=>Promise<void>;onError:(reason:unknown)=>void}){const t=getMessages(locale);const [password,setPassword]=useState("");const [confirm,setConfirm]=useState("");const [pending,setPending]=useState(false);const [error,setError]=useState("");async function submit(event:FormEvent){event.preventDefault();if(!exists&&password.length<12){setError(t.status.weakPassword);return;}if(!exists&&password!==confirm){setError(t.status.mismatch);return;}const value=password;setPassword("");setConfirm("");setPending(true);setError("");try{await onSubmit(value,!exists);}catch(reason){onError(reason);}finally{setPending(false);}}return <div className="vault-gate"><div className="vault-emblem" aria-hidden="true">◇</div><h2>{exists?t.shell.lockedTitle:t.shell.createTitle}</h2><p>{exists?t.shell.lockedBody:t.shell.createBody}</p><form onSubmit={submit} className="mt-7 grid w-full max-w-sm gap-4"><label>{t.shell.password}<input autoFocus type="password" autoComplete={exists?"current-password":"new-password"} value={password} onChange={(event)=>setPassword(event.target.value)} required minLength={exists?undefined:12}/></label>{!exists&&<label>{t.shell.confirmPassword}<input type="password" autoComplete="new-password" value={confirm} onChange={(event)=>setConfirm(event.target.value)} required/></label>}{error&&<p role="alert" className="text-sm text-rose-300">{error}</p>}<button className="button button-primary" disabled={pending} type="submit">{pending?t.pages.loading:exists?t.shell.unlock:t.shell.createVault}</button></form></div>;}
+

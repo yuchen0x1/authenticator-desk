@@ -1,0 +1,1 @@
+export function ErrorState({title,detail,action,onRetry}:{title:string;detail:string;action:string;onRetry:()=>void}){return <div className="inline-error" role="alert"><strong>{title}</strong><p>{detail}</p><button className="button button-subtle mt-3" onClick={onRetry}>{action}</button></div>; }

@@ -1,0 +1,1 @@
+export function EmptyState({title,detail,action,onAction}:{title:string;detail:string;action:string;onAction:()=>void}){return <div className="empty-state"><span className="empty-mark" aria-hidden="true">◇</span><h2>{title}</h2><p>{detail}</p><button className="button button-primary mt-5" onClick={onAction}>{action}</button></div>; }

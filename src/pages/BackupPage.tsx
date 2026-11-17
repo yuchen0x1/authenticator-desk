@@ -1,0 +1,31 @@
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { getMessages } from "../i18n";
+import { backupMessages } from "../i18n/backup";
+import { backupCommands, type BackupFileView, type RestoreMode, type RestorePreview } from "../lib/backup";
+import { AutoBackupSettings } from "../components/backup/AutoBackupSettings";
+import type { WorkspaceProps } from "../App";
+
+export function BackupPage({locale,onError,notify,refresh}:WorkspaceProps) {
+  const t=getMessages(locale),b=backupMessages(locale);
+  const [password,setPassword]=useState(""),[confirm,setConfirm]=useState("");
+  const [operation,setOperation]=useState<"create"|"restore">("create"),[mode,setMode]=useState<RestoreMode>("merge");
+  const [preview,setPreview]=useState<RestorePreview|null>(null),[selected,setSelected]=useState<number[]>([]);
+  const [confirmed,setConfirmed]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState("");
+  const [files,setFiles]=useState<BackupFileView[]|null>(null);
+  const live=useRef(true);
+  useEffect(()=>{live.current=true;return()=>{live.current=false}},[]);
+  function switchOperation(value:"create"|"restore"){setOperation(value);setPassword("");setConfirm("");setError("");setPreview(null);setConfirmed(false)}
+  async function submit(event:FormEvent) {
+    event.preventDefault();if(operation==="create"&&password!==confirm){setError(b.passwordMismatch);return}
+    const secret=password;setPassword("");setConfirm("");setError("");setBusy(true);setPreview(null);setConfirmed(false);
+    try {if(operation==="create"){const value=await backupCommands.create(secret);if(live.current&&value)notify(`${b.created}: ${value.account_count}`)}
+      else {const value=await backupCommands.preview(secret,mode);if(live.current&&value){setPreview(value);setSelected(value.items.filter(item=>item.status==="new").map(item=>item.index))}}}
+    catch(error){if(live.current)onError(error)}finally{if(live.current)setBusy(false)}
+  }
+  async function apply() {
+    if(!preview||(preview.mode==="replace"&&!confirmed))return;
+    setBusy(true);try{const result=await backupCommands.restore(preview.preview_id,selected,confirmed);if(!live.current)return;setPreview(null);setSelected([]);setConfirmed(false);await refresh();if(live.current)notify(`${b.restored}: ${result.restored_accounts}`)}catch(error){if(live.current)onError(error)}finally{if(live.current)setBusy(false)}
+  }
+  async function browse(){setBusy(true);try{const value=await backupCommands.list();if(live.current&&value)setFiles(value)}catch(error){if(live.current)onError(error)}finally{if(live.current)setBusy(false)}}
+  return <section><div className="page-heading"><div><h2>{t.pages.backup}</h2><p>{b.hint}</p></div></div><div className="settings-group"><div className="segmented backup-tabs"><button aria-pressed={operation==="create"} disabled={busy} onClick={()=>switchOperation("create")}>{b.create}</button><button aria-pressed={operation==="restore"} disabled={busy} onClick={()=>switchOperation("restore")}>{b.restore}</button></div><form onSubmit={submit}><div className="setting-grid"><label>{t.fields.backupPassword}<input type="password" autoComplete={operation==="create"?"new-password":"current-password"} value={password} onChange={event=>setPassword(event.target.value)} required/></label>{operation==="create"?<label>{b.passwordConfirm}<input type="password" autoComplete="new-password" value={confirm} onChange={event=>setConfirm(event.target.value)} required/></label>:<label>{b.restore}<select value={mode} onChange={event=>{setMode(event.target.value as RestoreMode);setPreview(null);setConfirmed(false)}}><option value="merge">{b.merge}</option><option value="replace">{b.replace}</option></select></label>}</div>{operation==="restore"&&mode==="replace"&&<p className="backup-warning">{b.replaceWarning}</p>}{error&&<p role="alert">{error}</p>}<div className="backup-actions"><button className="button button-primary" disabled={busy}>{busy?t.pages.loading:operation==="create"?b.create:b.preview}</button></div></form></div>{preview&&<div className="preview-section"><div className="section-heading"><h3>{b.restore}</h3><span>{preview.account_count} · {t.navigation.categories}: {preview.category_count}</span></div>{preview.items.map(item=><label key={item.index} className="preview-row"><input type="checkbox" disabled={busy||item.status!=="new"} checked={selected.includes(item.index)} onChange={event=>setSelected(old=>event.target.checked?[...old,item.index]:old.filter(index=>index!==item.index))}/><span className="min-w-0 flex-1"><strong className="block truncate">{item.issuer}</strong><span className="text-sm text-[var(--muted)]">{item.account_name}</span></span><span className={`import-status status-${item.status}`}>{item.status==="new"?t.status.newItem:t.status.duplicate}</span></label>)}{preview.mode==="replace"&&<label className="backup-warning backup-confirm"><input type="checkbox" checked={confirmed} onChange={event=>setConfirmed(event.target.checked)}/>{b.confirmReplace}</label>}<div className="backup-actions"><button className="button button-subtle" disabled={busy} onClick={()=>{setPreview(null);setSelected([]);setConfirmed(false)}}>{t.actions.cancel}</button><button className="button button-primary" disabled={busy||!selected.length||(preview.mode==="replace"&&!confirmed)} onClick={()=>void apply()}>{b.apply} ({selected.length})</button></div></div>}<AutoBackupSettings locale={locale} onError={onError} notify={notify}/><div className="settings-group"><div className="section-heading"><h3>{b.browse}</h3><button className="button button-subtle" disabled={busy} onClick={()=>void browse()}>{b.browse}</button></div>{files&&(!files.length?<p className="backup-hint">{b.empty}</p>:<div className="backup-table-wrap"><table className="backup-table"><thead><tr><th>{b.file}</th><th>{b.size}</th><th>{b.modified}</th><th>{t.fields.kind}</th></tr></thead><tbody>{files.map(file=><tr key={file.name}><td>{file.name}</td><td>{(file.bytes/1024).toFixed(1)} KiB</td><td>{file.modified_at?new Date(Number(file.modified_at)*1000).toLocaleString(locale):"—"}</td><td>{file.automatic?b.automatic:b.manual}</td></tr>)}</tbody></table></div>)}</div></section>;
+}

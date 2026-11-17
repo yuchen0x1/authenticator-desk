@@ -1,0 +1,9 @@
+import type { Locale } from "./index";
+
+const errors = {
+ "zh-CN": {vault_locked:"保险库已锁定，请重新解锁。",invalid_input:"输入无效，请检查后重试。",authentication_failed:"密码错误或数据无法验证。",storage:"无法读取本机保险库。",crypto:"加密操作未完成。",conflict:"数据发生变化或账户重复，请刷新后重试。",not_found:"未找到所需账户。",invalid_parameters:"账户参数无效。",backend_unavailable:"请在桌面应用中完成此操作。",unknown:"操作未完成，请重试。"},
+ "zh-TW": {vault_locked:"保險庫已鎖定，請重新解鎖。",invalid_input:"輸入無效，請檢查後重試。",authentication_failed:"密碼錯誤或資料無法驗證。",storage:"無法讀取本機保險庫。",crypto:"加密操作未完成。",conflict:"資料已變更或帳戶重複，請重新整理後重試。",not_found:"找不到所需帳戶。",invalid_parameters:"帳戶參數無效。",backend_unavailable:"請在桌面應用程式中完成此操作。",unknown:"操作未完成，請重試。"},
+ en:{vault_locked:"The vault is locked. Unlock it to continue.",invalid_input:"Check the input and try again.",authentication_failed:"The password or authenticated data could not be verified.",storage:"The local vault could not be read.",crypto:"The encrypted operation failed.",conflict:"Data changed or the account is duplicated. Refresh and try again.",not_found:"The account was not found.",invalid_parameters:"The account parameters are invalid.",backend_unavailable:"Complete this action in the desktop application.",unknown:"The action failed. Please try again."},
+ ja:{vault_locked:"保管庫はロックされています。ロックを解除してください。",invalid_input:"入力内容を確認して再試行してください。",authentication_failed:"パスワードまたは認証データを確認できませんでした。",storage:"ローカル保管庫を読み取れません。",crypto:"暗号化操作に失敗しました。",conflict:"データ変更または重複があります。更新して再試行してください。",not_found:"アカウントが見つかりません。",invalid_parameters:"アカウントのパラメーターが無効です。",backend_unavailable:"デスクトップアプリで操作してください。",unknown:"操作に失敗しました。再試行してください。"},
+} satisfies Record<Locale, Record<string,string>>;
+export function errorMessage(locale:Locale,error:unknown):string {const code=typeof error==="object"&&error!==null&&"code" in error?String(error.code):"unknown";const map=errors[locale]??errors["zh-CN"];return map[code as keyof typeof map]??map.unknown;}

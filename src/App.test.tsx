@@ -7,7 +7,7 @@ describe("locked application shell", () => {
   it("identifies the unavailable desktop backend without inventing vault data", async () => {
     render(<App />);
 
-    expect(screen.getByRole("heading", { name: "AUTHENTICATOR DESK" })).toBeVisible();
+    expect(screen.getByText("AUTHENTICATOR DESK")).toBeVisible();
     expect(screen.getByRole("navigation", { name: "主导航" })).toBeVisible();
     expect(await screen.findByText("桌面安全后端不可用")).toBeVisible();
     expect(screen.getByText("请在 AUTHENTICATOR DESK 桌面应用中打开此界面。")).toBeVisible();
