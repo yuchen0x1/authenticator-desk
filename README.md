@@ -65,6 +65,10 @@ The browser shell explicitly reports that the desktop security backend is unavai
 pnpm tauri dev
 ```
 
+## Publishing release notes
+
+For a formatted release, write `docs/releases/<tag>.md` with the changes, Windows downloads and upgrade details for that tag. The publisher also accepts a matching version in [the release history](docs/releases/release-notes.md). If neither is available, GitHub generates notes for the tag. The latest published overview appears above.
+
 ## Verification
 
 ```powershell

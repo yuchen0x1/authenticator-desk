@@ -55,10 +55,15 @@ jobs:
 
       # Artifacts are unsigned by design; the release notes and the
       # acceptance checklist must not claim signing or an update channel.
+      - name: Select notes for the release tag
+        id: notes
+        run: node .github/scripts/select-release-notes.mjs
+
       - name: Attach bundles to GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          body_path: docs/releases/release-notes.md
+          body_path: ${{ steps.notes.outputs.path }}
+          generate_release_notes: ${{ steps.notes.outputs.path == '' }}
           fail_on_unmatched_files: true
           files: |
             src-tauri/target/release/bundle/nsis/*.exe
