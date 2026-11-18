@@ -9,17 +9,17 @@ recorded; claims without evidence are marked PARTIAL or BLOCKED.
 | Check | Status | Evidence |
 |---|---|---|
 | `pnpm install --frozen-lockfile` | PASS | installs cleanly, lockfile unchanged |
-| TypeScript + frontend tests | PASS | `pnpm exec tsc --noEmit` clean; 11 tests pass |
-| Rust tests | PASS | `cargo test` exit 0; 74 tests across 14 binaries |
-| `pnpm tauri build` NSIS bundle | PASS | `src-tauri/target/release/bundle/nsis/AUTHENTICATOR DESK_0.1.0_x64-setup.exe` (3,592,529 bytes) |
-| `pnpm tauri build` MSI bundle | PASS | `src-tauri/target/release/bundle/msi/AUTHENTICATOR DESK_0.1.0_x64_en-US.msi` (5,095,424 bytes) |
-| Bundle SHA-256 | PASS | NSIS `4330f4e80720c3635f78b5df47e3b0ab386412efd46c4783108e184075781108`; MSI `12787d0a5220bd213c287e069dc731eca5f58524ff3a19e2c58e14a1b2baf51d` |
-| Code signing | NOT APPLICABLE | no signing identity configured; no signing claim is made |
+| TypeScript + frontend tests | PASS | `pnpm exec tsc --noEmit` clean; 18 tests across 8 files passed |
+| Rust tests | PASS | `cargo test` exit 0; 35 library tests and 39 integration tests passed |
+| `pnpm tauri build` NSIS bundle | PASS | `src-tauri/target/release/bundle/nsis/AUTHENTICATOR DESK_0.1.0_x64-setup.exe` (3,595,009 bytes) |
+| `pnpm tauri build` MSI bundle | PASS | `src-tauri/target/release/bundle/msi/AUTHENTICATOR DESK_0.1.0_x64_en-US.msi` (5,099,520 bytes) |
+| Bundle SHA-256 | PASS | NSIS `0993558f2ea6d97e6b09cff5b4a4d11fb4e64bd27dffac09ce01a90a25c067a5`; MSI `992c0d61d56246d78dada5ef85d4e01f562e827dceb54738318b1217be7fd541` |
+| Code signing | NOT APPLICABLE | Get-AuthenticodeSignature reported NotSigned for both installers |
 | Upgrade path | BLOCKED | no prior released version exists to upgrade from |
 
-## Install and lifecycle (NSIS, packaged app)
+## Earlier NSIS install and lifecycle checks
 
-`scripts/verify-install.ps1` output, run against the NSIS setup exe:
+`scripts/verify-install.ps1` and manual observations from the earlier 0.1.0 NSIS build are recorded below. The final rebuild received build and hash verification.
 
 | Check | Status | Evidence |
 |---|---|---|
@@ -31,6 +31,19 @@ recorded; claims without evidence are marked PARTIAL or BLOCKED.
 | Lock/unlock cycle | PASS | lock overlay hides all page content; unlock with master password restores the code center |
 | Uninstall | PASS | install directory removed by `uninstall.exe /S` |
 | Data preservation across reinstall | PASS | vault SHA-256 `36b02ca2…5e45196` unchanged across a silent reinstall |
+
+## Isolated desktop session
+
+The release executable used a temporary `AUTHDESK_DATA_DIR` and one synthetic favorite account. These observations precede the final panel language correction.
+
+| Check | Status | Observation |
+|---|---|---|
+| Open favorites | PASS | Ctrl+Shift+Q opened a separate window showing the favorite, its current code and countdown. |
+| Lock and reopen | PASS | Ctrl+Shift+L hid the panel and showed the locked main window. After unlock, Ctrl+Shift+Q showed the favorite and a current code again. |
+| Save desktop settings | PASS | The notification switch retained its saved value after navigating away and returning. It was restored to off. |
+| Test notification | PARTIAL | The app confirmed submission. Visual delivery of a Windows toast was unverified. |
+| Protected copy | PARTIAL | Clipboard ownership and expiry passed in the Rust tests. The copy button was skipped to preserve existing system clipboard content. |
+| Tray and startup | PARTIAL | Tray preference logic passed its Rust test. Tray clicks and launch at Windows sign-in remain unverified. |
 
 ## Functional checks (automated)
 
@@ -46,22 +59,21 @@ recorded; claims without evidence are marked PARTIAL or BLOCKED.
 
 ## Screenshots
 
-Captured from the release build (`src-tauri/target/release/authenticator-desk.exe`) at 1280×857 under `screenshots/`:
+Captured from the release build (`src-tauri/target/release/authenticator-desk.exe`) under `screenshots/`:
 
 - `01-locked-create-vault.png` — first run, locked shell with vault creation
 - `02-dashboard.png` — overview with zero-state cards
 - `03-codes.png` — code center with a live TOTP card and countdown ring
 - `04-accounts.png` — account list
-- `05-import.png` — import page with URI textarea and migration file picker
+- `05-import.png` — import page with URI textarea, migration file input and QR image picker
 - `06-backup.png` — encrypted backup and automatic backup forms
 - `07-security.png` — security audit report (integrity, duplicates, plaintext scan, clock, ACL status)
-- `08-settings.png` — preferences with appearance, security, and honest Windows Hello/update disclosures
+- `08-settings.png` — preferences showing appearance and security controls
 - `09-locked-overlay.png` — lock overlay hiding page content
+- `10-quick-panel.png` — separate favorites window showing the synthetic account and countdown
+
+Images 05, 08 and 09 are 1493×997. Image 10 is 543×747. The other six images are 1280×857.
 
 ## Evidence hygiene
 
-The acceptance vault was a synthetic test vault (master password
-`authdesk-acceptance-2026`, one Demo account with the public demo secret
-`JBSWY3DPEHPK3PXP`) created for this run in an empty app data directory. The
-evidence hashes above were recorded before the data directory was removed
-after the run; no user data existed or was affected.
+The isolated desktop session used a synthetic vault. Its temporary data directory was removed after capture.

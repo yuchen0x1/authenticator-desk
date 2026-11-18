@@ -1,0 +1,41 @@
+# Release notes — AUTHENTICATOR DESK 0.1.0
+
+Date: 2026-11-18. Channel: local build from this repository; no signing, no
+auto-update channel, and no online verification exist in this release.
+
+## Desktop workflow
+
+- Press Ctrl+Shift+Q to open favorite accounts with live codes and countdowns. The panel follows the saved language, hides on lock and reloads after unlock.
+- Save tray preferences, startup behavior, notifications and global shortcuts in Settings. Send a test notification after enabling and saving notifications.
+- Choose a QR image on the Import page to preview accounts. Copy a code from the account list or favorites panel using the protected clipboard.
+
+## Highlights
+
+- Offline-first desktop authenticator: encrypted SQLite vault protected by
+  Argon2id and AES-256-GCM, with lock on demand, on idle, and on exit.
+- TOTP and HOTP with HMAC-SHA1/SHA-256/SHA-512, 6/7/8 digits, configurable
+  period and T0; verified against RFC 4226 and RFC 6238 test vectors.
+- Imports: otpauth URI paste and file import with per-row
+  preview/duplicate/invalid classification and transactional commit —
+  including Google Authenticator migration URIs, Aegis plain JSON, 2FAS
+  plain JSON, andOTP plain JSON, and plain otpauth lists (Ente plaintext).
+- Encrypted `.authdesk` backups with independent Argon2id salt, restore
+  preview, merge/replace confirmation, and retention-managed automatic
+  backups.
+- Security audit surface: integrity check, duplicate and invalid-config
+  detection, plaintext-file scan, backup and time status.
+- Clipboard protection with ownership tokens and TTL/lock/exit cleanup.
+- Desktop shell: tray show/lock/quit, quick panel that refuses codes while
+  locked, global hotkeys, autostart option, and notifications.
+- Localization: zh-CN, zh-TW, en, ja with runtime switching.
+
+## Known limits
+
+- Encrypted third-party backups (Aegis/2FAS/andOTP/Ente) and FreeOTP are
+  detected and rejected — no decryption in this release.
+- Windows Hello, camera capture, signing, and auto-update are not
+  implemented or verified.
+
+## Bundles
+
+The local Windows x64 build produced unsigned NSIS and MSI installers. File sizes and SHA-256 hashes are in the [acceptance checklist](../acceptance-checklist.md).

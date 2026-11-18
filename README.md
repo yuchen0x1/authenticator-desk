@@ -9,6 +9,10 @@ clipboard protection. The React UI receives only typed, redacted view
 models. The desktop shell ships tray, hotkey, autostart, and notification
 integrations behind the `desktop` feature.
 
+## 最新更新
+
+**0.1.0 · 2026-11-18** — Press Ctrl+Shift+Q to open favorite codes in a separate window. Settings lets you change desktop shortcuts and tray behavior. Import accepts QR images, and account cards can copy codes to the protected clipboard. [Release notes](docs/releases/release-notes.md)
+
 ## Import and migration
 
 - Textarea paste and file import both route through the same

@@ -1,7 +1,6 @@
 # Known limitations
 
-Honest list as of 2026-11-18. Anything not listed as done in the test report
-should be assumed not implemented.
+Recorded on 2026-11-18.
 
 ## Encrypted third-party migration formats
 
@@ -28,15 +27,8 @@ should be assumed not implemented.
   this instead of exposing a toggle that would pretend otherwise.
 - Camera capture for QR import is not implemented; image-file QR import is
   the supported path.
-- No code signing, no auto-update channel, and no online release
-  verification. Installer and upgrade evidence is pending the Task 9
-  acceptance run; absence of that evidence means those claims are not made.
-- Global shortcuts, tray interactions, autostart, and notifications compile
-  and are registered behind the `desktop` feature. The packaged app was
-  verified for install, launch, vault creation, code generation, lock,
-  uninstall, and data preservation (`acceptance-checklist.md`); interactive
-  tray-click, global-shortcut conflict, and Toast delivery behavior remain
-  validated only through the command surface in `tests/desktop.rs`.
+- Both Windows installers are unsigned. Signed updates and online release verification are unavailable. A cross-version upgrade requires an earlier released version.
+- The isolated Windows session exercised the favorites and lock shortcuts. Manual checks remain open for tray clicks, shortcut conflicts with other apps, startup at sign-in, Windows toast visibility and protected copy through the system clipboard. See the [acceptance checklist](acceptance-checklist.md).
 
 ## Backup constraints
 

@@ -1,0 +1,130 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { getMessages, type Locale } from "../../i18n";
+import { desktopCommands, type DesktopCapabilities, type DesktopConfig } from "../../lib/tauri";
+
+type LoadState = "loading" | "ready" | "error";
+
+export function DesktopSettings({ locale, onError, notify }: {
+  locale: Locale;
+  onError: (error: unknown) => void;
+  notify: (message: string) => void;
+}) {
+  const t = getMessages(locale);
+  const [config, setConfig] = useState<DesktopConfig | null>(null);
+  const [savedNotifications, setSavedNotifications] = useState<boolean | null>(null);
+  const [capabilities, setCapabilities] = useState<DesktopCapabilities | null>(null);
+  const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [saving, setSaving] = useState(false);
+  const [testingNotification, setTestingNotification] = useState(false);
+  const request = useRef(0);
+
+  const load = useCallback(async () => {
+    const currentRequest = ++request.current;
+    setLoadState("loading");
+    try {
+      const [currentConfig, currentCapabilities] = await Promise.all([
+        desktopCommands.config(),
+        desktopCommands.capabilities(),
+      ]);
+      if (currentRequest !== request.current) return;
+      setConfig(currentConfig);
+      setSavedNotifications(currentConfig.notifications);
+      setCapabilities(currentCapabilities);
+      setLoadState("ready");
+    } catch (error) {
+      if (currentRequest !== request.current) return;
+      setLoadState("error");
+      onError(error);
+    }
+  }, [onError]);
+
+  useEffect(() => {
+    void load();
+    return () => { request.current++; };
+  }, [load]);
+
+  async function save() {
+    if (!config || saving) return;
+    const updated = { ...config };
+    setSaving(true);
+    try {
+      await desktopCommands.saveConfig(updated);
+      setConfig(updated);
+      setSavedNotifications(updated.notifications);
+      setCapabilities((current) => current ? { ...current, startup: updated.startup } : current);
+      notify(t.status.saved);
+    } catch (error) {
+      onError(error);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function testNotification() {
+    if (!config?.notifications || savedNotifications !== true || !capabilities?.notifications || saving || testingNotification) return;
+    setTestingNotification(true);
+    try {
+      await desktopCommands.testNotification();
+      notify(t.desktop.notificationSent);
+    } catch (error) {
+      onError(error);
+    } finally {
+      setTestingNotification(false);
+    }
+  }
+
+  function update<K extends keyof DesktopConfig>(key: K, value: DesktopConfig[K]) {
+    setConfig((current) => current ? { ...current, [key]: value } : current);
+  }
+
+  return <section className="settings-group" aria-labelledby="desktop-settings-title">
+    <h3 id="desktop-settings-title">{t.desktop.title}</h3>
+    {loadState === "loading" && <p role="status">{t.desktop.loading}</p>}
+    {loadState === "error" && <div className="inline-error" role="alert">
+      <p>{t.desktop.loadError}</p>
+      <button type="button" className="button button-subtle" onClick={() => void load()}>{t.desktop.retry}</button>
+    </div>}
+    {loadState === "ready" && config && capabilities && <>
+      <div className="desktop-settings-options">
+        <label className="toggle-row"><span>{t.desktop.closeToTray}</span><input type="checkbox" checked={config.close_to_tray} onChange={(event) => update("close_to_tray", event.target.checked)} /></label>
+        <label className="toggle-row"><span>{t.desktop.minimizeToTray}</span><input type="checkbox" checked={config.minimize_to_tray} onChange={(event) => update("minimize_to_tray", event.target.checked)} /></label>
+        <label className="toggle-row"><span>{t.desktop.startup}</span><input type="checkbox" checked={config.startup} onChange={(event) => update("startup", event.target.checked)} /></label>
+        <label className="toggle-row"><span>{t.desktop.notifications}</span><input type="checkbox" checked={config.notifications} onChange={(event) => update("notifications", event.target.checked)} /></label>
+      </div>
+      <div className="setting-grid">
+        <label>{t.desktop.showShortcut}<input autoComplete="off" maxLength={100} value={config.show_shortcut} onChange={(event) => update("show_shortcut", event.target.value)} /></label>
+        <label>{t.desktop.quickPanelShortcut}<input autoComplete="off" maxLength={100} value={config.quick_panel_shortcut} onChange={(event) => update("quick_panel_shortcut", event.target.value)} /></label>
+        <label>{t.desktop.lockShortcut}<input autoComplete="off" maxLength={100} value={config.lock_shortcut} onChange={(event) => update("lock_shortcut", event.target.value)} /></label>
+      </div>
+      <p className="backup-hint">{t.desktop.shortcutHint}</p>
+      <div className="desktop-capabilities" aria-label={t.desktop.capabilities}>
+        <Capability label={t.desktop.tray} value={capabilities.tray ? t.desktop.available : t.desktop.unavailable} ready={capabilities.tray} />
+        <Capability label={t.desktop.shortcuts} value={capabilities.shortcuts ? t.desktop.available : t.desktop.unavailable} ready={capabilities.shortcuts} />
+        <Capability label={t.desktop.startupStatus} value={config.startup ? t.desktop.enabled : t.desktop.disabled} ready={config.startup} />
+        <Capability label={t.desktop.notificationPermission} value={capabilities.notifications ? t.desktop.available : t.desktop.unavailable} ready={capabilities.notifications} />
+        <Capability label={t.desktop.clipboard} value={capabilities.clipboard ? t.desktop.available : t.desktop.unavailable} ready={capabilities.clipboard} />
+        <Capability label={t.desktop.qrImage} value={capabilities.qr_image ? t.desktop.available : t.desktop.unavailable} ready={capabilities.qr_image} />
+        <Capability label={t.desktop.camera} value={capabilities.camera ? t.desktop.available : t.desktop.unavailable} ready={capabilities.camera} />
+      </div>
+      <div className="backup-actions">
+        <button type="button" className="button button-subtle" disabled={!config.notifications || savedNotifications !== config.notifications || !capabilities.notifications || saving || testingNotification} onClick={() => void testNotification()}>
+          {testingNotification ? t.pages.loading : t.desktop.testNotification}
+        </button>
+        <button type="button" className="button button-primary" disabled={saving} onClick={() => void save()}>
+          {saving ? t.pages.loading : t.desktop.save}
+        </button>
+      </div>
+    </>}
+  </section>;
+}
+
+function Capability({ label, value, ready }: {
+  label: string;
+  value: string;
+  ready: boolean;
+}) {
+  return <div className="capability-inline">
+    <span>{label}</span>
+    <span className="desktop-capability-state" data-ready={ready}>{value}</span>
+  </div>;
+}

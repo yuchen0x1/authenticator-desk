@@ -1,14 +1,12 @@
 # Test report
 
-Recorded 2026-11-18 on Windows (Git Bash, MSVC toolchain). Every line below
-reflects a command actually run in this working tree; statuses use PASS /
-FAIL / PARTIAL / BLOCKED / NOT APPLICABLE.
+Recorded on Windows 11 x64 on 2026-11-18. The automated checks cover the current implementation. The acceptance checklist identifies the builds used for interactive checks.
 
 ## Commands and observed results
 
 | Check | Command | Status | Observed |
 |---|---|---|---|
-| Rust unit + integration tests | `cargo test --manifest-path src-tauri/Cargo.toml` | PASS | exit 0; 14 test binaries, 74 tests passed, 0 failed |
+| Rust unit + integration tests | `cargo test --locked --manifest-path src-tauri/Cargo.toml` | PASS | 35 library tests and 39 integration tests across 12 integration binaries passed (74 total) |
 | OTP vectors | included in Rust run | PASS | RFC 4226 HOTP counters 0–9; RFC 6238 SHA-1/256/512 vectors for t=59, 1111111109, 1111111111, 1234567890, 2000000000, 20000000000 |
 | Vault lifecycle | `tests/vault.rs`, `tests/storage.rs` | PASS | create, unlock, wrong-password rejection, lock, re-unlock, integrity check, no plaintext secret in SQLite bytes |
 | Accounts | `tests/accounts.rs` | PASS | CRUD, search, categories, tags, favorites, batch delete/move/reorder, duplicate conflict |
@@ -17,27 +15,16 @@ FAIL / PARTIAL / BLOCKED / NOT APPLICABLE.
 | Security audit | `tests/security_audit.rs` | PASS | audit report runs over a real vault; SHA-1 alone is not reported weak |
 | Clipboard | `tests/clipboard.rs` | PASS | token ownership, user content preserved, TTL cleanup |
 | QR decode | `tests/qr.rs` | PASS | synthetic QR fixtures decode; malformed/empty images rejected |
-| Desktop integrations | `tests/desktop.rs` | PASS | capability/config command surface (window-only APIs validated in-app, see limitations) |
+| Desktop integrations | `tests/desktop.rs` | PASS | tray availability gates close-to-tray and minimize-to-tray preferences |
 | Migration adapters | `tests/import_formats.rs` | PASS | 12 tests: Google migration batches, Aegis/2FAS/andOTP field mapping + defaults, steam rejection, duplicate classification, transactional commit, encrypted-format rejection with and without password |
-| Frontend tests | `pnpm test -- --run` | PASS | 5 files, 11 tests passed |
+| Frontend tests | `pnpm exec vitest run` | PASS | 18 tests in 8 files passed, including desktop settings, window routing, saved panel language, and late code responses after lock |
 | TypeScript | `pnpm exec tsc --noEmit` | PASS | no errors |
-| Desktop build | `cargo check --features desktop` / `pnpm tauri build` | PASS | release build compiles the desktop entry point and produces both NSIS (3,592,529 bytes) and MSI (5,095,424 bytes) bundles; install/launch evidence in `acceptance-checklist.md` |
+| Frontend production build | `pnpm build` | PASS | TypeScript and Vite completed successfully |
+| Desktop feature | `cargo check --locked --manifest-path src-tauri/Cargo.toml --features desktop --bin authenticator-desk` | PASS | MSVC check succeeded with one unused Rust import warning |
+| Windows packaging | `pnpm tauri build --ci` | PASS | Produced the x64 NSIS and MSI installers. Tauri also warned about the bundle identifier ending in `.app`. |
 
-## Coverage notes
+## Desktop and installer evidence
 
-- OTP verification uses published RFC vectors only; no random or mocked OTP
-  values are accepted as evidence.
-- Migration fixtures under `src-tauri/tests/fixtures/import/` are synthetic,
-  contain only public demo secrets, and were generated for this repository;
-  provenance is recorded in `migration-format-matrix.md`.
-- The desktop feature (tray, hotkeys, autostart, notifications) compiles and
-  its commands are covered by `tests/desktop.rs`; the packaged app installed,
-  launched, created a vault, generated a live TOTP, and completed lock,
-  uninstall, and reinstall-preservation cycles (see
-  `acceptance-checklist.md`). Interactive tray-click and global-shortcut
-  behavior remains validated only by the command surface in
-  `tests/desktop.rs`.
-- Installer verification (silent install, launch, uninstall, data
-  preservation across reinstall) was executed with
-  `scripts/verify-install.ps1`; upgrade path and signing remain BLOCKED /
-  NOT APPLICABLE without prior releases or a signing identity.
+In the isolated release executable, the global shortcut opened the favorites panel with a live TOTP and countdown. Locking hid the panel. Unlocking and reopening it restored the account. The application acknowledged the test notification after the saved notification setting was enabled. A component test covers the final correction to the panel's saved language.
+
+The earlier NSIS install, launch, reinstall and uninstall checks apply to the earlier 0.1.0 bundle. The installer hashes and remaining manual checks are listed in the [acceptance checklist](acceptance-checklist.md).
