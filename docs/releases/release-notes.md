@@ -1,7 +1,6 @@
 # Release notes — AUTHENTICATOR DESK 0.1.0
 
-Date: 2026-11-18. Channel: local build from this repository; no signing, no
-auto-update channel, and no online verification exist in this release.
+Windows x64 · 2026-11-18
 
 ## Desktop workflow
 
@@ -38,4 +37,4 @@ auto-update channel, and no online verification exist in this release.
 
 ## Bundles
 
-The local Windows x64 build produced unsigned NSIS and MSI installers. File sizes and SHA-256 hashes are in the [acceptance checklist](../acceptance-checklist.md).
+Choose the EXE setup or the MSI installer from the release assets. Both are unsigned. GitHub lists the SHA-256 digest of each uploaded file. The [acceptance checklist](https://github.com/yuchen0x1/authenticator-desk/blob/v0.1.0/docs/acceptance-checklist.md) records the separate local build.

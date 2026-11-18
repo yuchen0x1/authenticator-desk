@@ -13,6 +13,8 @@ integrations behind the `desktop` feature.
 
 **0.1.0 · 2026-11-18** — Press Ctrl+Shift+Q to open favorite codes in a separate window. Settings lets you change desktop shortcuts and tray behavior. Import accepts QR images, and account cards can copy codes to the protected clipboard. [Release notes](docs/releases/release-notes.md)
 
+Download the Windows x64 [EXE or MSI installer from GitHub Releases](https://github.com/yuchen0x1/authenticator-desk/releases/latest).
+
 ## Import and migration
 
 - Textarea paste and file import both route through the same
