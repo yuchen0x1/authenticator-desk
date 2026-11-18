@@ -15,7 +15,7 @@ integrations behind the `desktop` feature.
 
 **[v0.1.0](https://github.com/yuchen0x1/authenticator-desk/releases/tag/v0.1.0)** · 2026-11-18
 
-Authenticator Desk 是一款离线桌面验证器。首次启动时，用主密码创建本机保险库，即可添加双重验证账户。日常登录时，按 Ctrl+Shift+Q 就能查看收藏账户的验证码和剩余时间。
+The first Windows release stores TOTP and HOTP accounts in an encrypted local vault. Press Ctrl+Shift+Q to see favorite codes, import accounts from a QR image, or restore an encrypted backup.
 
 [Release history](https://github.com/yuchen0x1/authenticator-desk/releases)
 
