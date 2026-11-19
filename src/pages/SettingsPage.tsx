@@ -1,6 +1,7 @@
 import { useRef, useState, type FormEvent } from "react";
 import { AutoBackupSettings } from "../components/backup/AutoBackupSettings";
 import { DesktopSettings } from "../components/desktop/DesktopSettings";
+import { UpdateSettings } from "../components/desktop/UpdateSettings";
 import { trapDialogFocus } from "../components/common/dialogFocus";
 import { getMessages } from "../i18n";
 import { changeMasterPassword } from "../lib/tauri";
@@ -111,7 +112,6 @@ export function SettingsPage({ locale, settings, saveSettings, onError, notify }
           <label>{t.settings.defaultPeriod}<input type="number" min={1} max={3600} value={draft.default_period_secs} onChange={(event) => change("default_period_secs", Number(event.target.value))} /></label>
         </div>
         <Capability label={t.settings.windowsHello} detail={t.settings.windowsHelloDetail} />
-        <Capability label={t.settings.updater} detail={t.settings.updaterDetail} />
         <button type="button" className="button button-subtle mt-4" onClick={() => {
           returnFocus.current = document.activeElement as HTMLElement;
           setPasswordOpen(true);
@@ -121,6 +121,7 @@ export function SettingsPage({ locale, settings, saveSettings, onError, notify }
         <button className="button button-primary">{t.actions.save}</button>
       </div>
     </form>
+    <UpdateSettings locale={locale} />
     <DesktopSettings locale={locale} onError={onError} notify={notify} />
     <AutoBackupSettings locale={locale} onError={onError} notify={notify} />
     {passwordOpen && <div className="dialog-backdrop">

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Private security report
+    url: https://github.com/yuchen0x1/authenticator-desk/security/advisories/new
+    about: Report issues involving vaults, credentials, or update authenticity privately.

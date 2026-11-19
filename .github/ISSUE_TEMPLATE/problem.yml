@@ -1,0 +1,18 @@
+name: Bug, platform or upgrade issue
+description: Report an application, installation or update problem
+title: "[Bug] "
+body:
+  - type: input
+    id: environment
+    attributes:
+      label: App version, installer type, OS version and architecture
+      placeholder: 0.2.0 / EXE / Windows 11 x64
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Steps, expected result and observed result
+      description: Redact account names, QR codes, OTP seeds, passwords and backup files.
+    validations:
+      required: true

@@ -1,0 +1,11 @@
+name: Feature request
+description: Describe a workflow that should improve
+title: "[Feature] "
+body:
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Task and current difficulty
+      description: Include the platform, expected behavior and any accessibility needs.
+    validations:
+      required: true

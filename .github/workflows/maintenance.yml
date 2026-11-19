@@ -1,0 +1,37 @@
+name: Maintenance
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "35 2 1 * *"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Verify latest release and collect upstream updates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$(gh release view --json tagName --jq .tagName)"
+          echo "## Stable release $tag" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$tag" == v0.1.0 ]]; then
+            gh release download "$tag" --dir verified-download --pattern '*.exe' --pattern '*.msi'
+            test "$(find verified-download -type f | wc -l)" -eq 2
+            echo 'Legacy EXE and MSI both downloaded.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            gh release download "$tag" --dir verified-download
+            node scripts/release.mjs verify verified-download "$tag" signed
+            echo 'Asset set and checksums verified.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          printf '\n## Upstream snapshot\n\n' >> "$GITHUB_STEP_SUMMARY"
+          for repo in Legends/otp-harbor Levminer/authme paolostivanin/OTPClient beemdevelopment/Aegis twofas/2fas-android tauri-apps/plugins-workspace; do
+            gh api "repos/$repo" --jq '"- [\(.full_name)](\(.html_url)) · pushed \(.pushed_at) · \(.stargazers_count) stars"' >> "$GITHUB_STEP_SUMMARY"
+          done

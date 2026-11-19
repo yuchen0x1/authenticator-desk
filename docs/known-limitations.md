@@ -27,7 +27,7 @@ Recorded on 2026-11-18.
   this instead of exposing a toggle that would pretend otherwise.
 - Camera capture for QR import is not implemented; image-file QR import is
   the supported path.
-- Both Windows installers are unsigned. Signed updates and online release verification are unavailable. A cross-version upgrade requires an earlier released version.
+- Windows installers lack an Authenticode publisher certificate. Updater signatures use the project release key. v0.1.0 requires a manual upgrade.
 - The isolated Windows session exercised the favorites and lock shortcuts. Manual checks remain open for tray clicks, shortcut conflicts with other apps, startup at sign-in, Windows toast visibility and protected copy through the system clipboard. See the [acceptance checklist](acceptance-checklist.md).
 
 ## Backup constraints
@@ -40,7 +40,6 @@ Recorded on 2026-11-18.
 
 ## Operational
 
-- Network use is limited to an optional, explicit time calibration request.
-  There is no sync service, account, or telemetry.
+- The update check is user-initiated. TOTP/HOTP uses local time and there is no sync service, account, or telemetry.
 - If the SQLite vault is corrupted beyond the integrity check, restore is
   possible only from a previous encrypted backup.

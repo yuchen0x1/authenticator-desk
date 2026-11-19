@@ -1,69 +1,61 @@
-# verify-install.ps1 - installation evidence for AUTHENTICATOR DESK.
-#
-# Usage: ./scripts/verify-install.ps1 -Installer <path-to-setup.exe>
-#
-# Verifies the packaged app installs, launches, keeps the vault across an
-# uninstall/reinstall cycle, and uninstalls cleanly. Every step prints an
-# explicit PASS/FAIL line so the output can be pasted into
-# docs/acceptance-checklist.md as evidence.
-
-param(
-    [Parameter(Mandatory = $true)][string]$Installer
-)
-
+# This script installs and uninstalls the application. Run on a disposable Windows user or runner.
+param([Parameter(Mandatory)][string]$Installer)
 $ErrorActionPreference = "Stop"
-$installerPath = Resolve-Path $Installer
-$installDir = "$env:LOCALAPPDATA\AUTHENTICATOR DESK"
-$exePath = Join-Path $installDir "authenticator-desk.exe"
-$dataDir = "$env:APPDATA\com.authenticatordesk.app"
-$vaultPath = Join-Path $dataDir "vault.sqlite3"
 
-function Assert-Step($name, $scriptBlock) {
-    $ok = & $scriptBlock
-    if ($ok) { Write-Host "PASS $name" } else { Write-Host "FAIL $name" }
-    return $ok
-}
+$installerPath = (Resolve-Path -LiteralPath $Installer).Path
+$root = Join-Path ([IO.Path]::GetTempPath()) ("authdesk-smoke-" + [Guid]::NewGuid())
+$installDir = Join-Path $root "app"
+$exe = Join-Path $installDir "authenticator-desk.exe"
+$vaultDir = Join-Path $root "data"
+$marker = Join-Path $vaultDir "preservation-marker.txt"
+$oldAppData = $env:AUTHDESK_DATA_DIR
+$process = $null
 
-Write-Host "==> Installing $installerPath"
-$process = Start-Process -FilePath $installerPath -ArgumentList "/S" -Wait -PassThru
-Assert-Step "NSIS installer exits with code 0" { $process.ExitCode -eq 0 } | Out-Null
-Assert-Step "app binary exists after install" { Test-Path $exePath } | Out-Null
-
-Write-Host "==> First launch"
-if (Test-Path $exePath) {
-    Start-Process -FilePath $exePath
-    Start-Sleep -Seconds 6
-    $running = Get-Process "authenticator-desk" -ErrorAction SilentlyContinue
-    Assert-Step "app process is running after launch" { $null -ne $running } | Out-Null
-    if ($running) { Stop-Process -Name "authenticator-desk" -Force -ErrorAction SilentlyContinue }
-    Start-Sleep -Seconds 2
-}
-else {
-    Write-Host "FAIL app binary missing; skipping launch checks"
+function Invoke-Setup {
+    $setup = Start-Process -FilePath $installerPath -ArgumentList "/S /D=$installDir" -WindowStyle Hidden -PassThru -Wait
+    if ($setup.ExitCode -ne 0 -or !(Test-Path -LiteralPath $exe)) {
+        throw "NSIS installation failed (exit $($setup.ExitCode))"
+    }
 }
 
-Write-Host "==> Vault data preservation across reinstall"
-if (Test-Path $vaultPath) {
-    $before = (Get-FileHash -Path $vaultPath -Algorithm SHA256).Hash
-    Write-Host "vault size: $((Get-Item $vaultPath).Length) bytes"
-}
-else {
-    Write-Host "note: no vault exists yet; create one in the app before the preservation test"
-}
-
-Start-Process -FilePath $installerPath -ArgumentList "/S" -Wait -PassThru | Out-Null
-if (Test-Path $vaultPath) {
-    $after = (Get-FileHash -Path $vaultPath -Algorithm SHA256).Hash
-    Assert-Step "vault file unchanged across reinstall" { $before -eq $after } | Out-Null
-}
-else {
-    Write-Host "PARTIAL vault preservation not measurable (no vault created)"
+if ($env:GITHUB_ACTIONS -ne "true") {
+    $registry = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall'
+    $installed = Get-ItemProperty "$registry\*" -ErrorAction SilentlyContinue |
+        Where-Object DisplayName -EQ 'AUTHENTICATOR DESK'
+    if ($installed -or (Get-Process authenticator-desk -ErrorAction SilentlyContinue)) {
+        throw "An AUTHENTICATOR DESK installation or process exists. Use a disposable Windows user."
+    }
 }
 
-Write-Host "==> Uninstall"
-$uninstaller = Get-ChildItem -Path $installDir -Filter "Uninstall*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($null -ne $uninstaller) {
-    Start-Process -FilePath $uninstaller.FullName -ArgumentList "/S" -Wait
+try {
+    New-Item -ItemType Directory -Path $vaultDir -Force | Out-Null
+    Set-Content -LiteralPath $marker -Value "Synthetic install test"
+    $digest = (Get-FileHash -LiteralPath $marker).Hash
+    $env:AUTHDESK_DATA_DIR = $vaultDir
+
+    Invoke-Setup
+    Write-Host "PASS NSIS install"
+    $process = Start-Process -FilePath $exe -WindowStyle Hidden -PassThru
+    Start-Sleep -Seconds 8
+    $process.Refresh()
+    if ($process.HasExited) { throw "Installed app exited during startup (exit $($process.ExitCode))" }
+    Write-Host "PASS installed process remains running"
+    Stop-Process -Id $process.Id
+    $process.WaitForExit()
+
+    Invoke-Setup
+    if ((Get-FileHash -LiteralPath $marker).Hash -ne $digest) { throw "Reinstall changed the data marker" }
+    Write-Host "PASS NSIS reinstall preserves external app data"
+
+    $uninstaller = Get-ChildItem -LiteralPath $installDir -Filter "uninstall.exe" | Select-Object -First 1
+    if (!$uninstaller) { throw "Uninstaller missing" }
+    $uninstall = Start-Process -FilePath $uninstaller.FullName -ArgumentList "/S" -WindowStyle Hidden -Wait -PassThru
+    if ($uninstall.ExitCode -ne 0 -or (Test-Path -LiteralPath $exe)) {
+        throw "NSIS uninstall failed (exit $($uninstall.ExitCode))"
+    }
+    if ((Get-FileHash -LiteralPath $marker).Hash -ne $digest) { throw "Uninstall changed the data marker" }
+    Write-Host "PASS NSIS uninstall preserves external app data"
+} finally {
+    $env:AUTHDESK_DATA_DIR = $oldAppData
+    if ($process -and !$process.HasExited) { Stop-Process -Id $process.Id }
 }
-Assert-Step "install directory removed" { -not (Test-Path $exePath) } | Out-Null
-Assert-Step "vault data survives uninstall" { Test-Path $vaultPath } | Out-Null

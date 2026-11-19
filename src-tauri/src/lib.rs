@@ -11,6 +11,8 @@ pub mod security;
 pub mod services;
 pub mod storage;
 pub mod vault;
+#[cfg(all(feature = "desktop", windows))]
+mod update;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
@@ -122,7 +124,10 @@ impl AppState {
 #[cfg(feature = "desktop")]
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    desktop::configure(tauri::Builder::default())
+    let builder = desktop::configure(tauri::Builder::default());
+    #[cfg(all(feature = "signed-updater", windows))]
+    let builder = update::configure(builder);
+    builder
         .manage(AppState::default())
         .on_window_event(desktop::handle_window_event)
         .setup(|app| {
@@ -200,6 +205,12 @@ pub fn run() {
             desktop::commands::quick_panel_accounts,
             desktop::commands::pick_qr_image,
             desktop::commands::test_notification,
+            #[cfg(windows)]
+            update::update_version,
+            #[cfg(windows)]
+            update::check_update,
+            #[cfg(windows)]
+            update::install_update,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run AUTHENTICATOR DESK");

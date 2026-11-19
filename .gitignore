@@ -12,3 +12,8 @@ target/
 *.log
 .idea/
 .vscode/
+release-assets/
+verified-download/
+*.key
+*.pfx
+*.p12

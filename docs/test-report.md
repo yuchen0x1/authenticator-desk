@@ -28,3 +28,21 @@ Recorded on Windows 11 x64 on 2026-11-18. The automated checks cover the current
 In the isolated release executable, the global shortcut opened the favorites panel with a live TOTP and countdown. Locking hid the panel. Unlocking and reopening it restored the account. The application acknowledged the test notification after the saved notification setting was enabled. A component test covers the final correction to the panel's saved language.
 
 The earlier NSIS install, launch, reinstall and uninstall checks apply to the earlier 0.1.0 bundle. The installer hashes and remaining manual checks are listed in the [acceptance checklist](acceptance-checklist.md).
+
+## v0.2.0 Windows release qualification
+
+| Check | Status | Observed |
+|---|---|---|
+| Signed updater build | PASS | Built x64 NSIS and MSI bundles with separate Tauri updater signatures using the configured release key. |
+| Release staging | PASS | `scripts/release.mjs` staged versioned installers, signatures, `SHA256SUMS.txt`, `release-assets.json` and signed `update.json`; local verification matched the bytes and metadata. |
+| Signed manifest and installer signatures | PASS | The staged-release test verified the minisign envelope and both installer signatures, checked SHA-256 and version-bound trusted comments, then rejected tampered bytes and payloads. |
+| Tauri manifest compatibility | PASS | The signed-updater unit test deserialized the static platform manifest through Tauri's `RemoteRelease` type. |
+| Updater URL and integrity guards | PASS | Four non-ignored signed-updater tests cover accepted/rejected URL hosts, malformed signatures, SHA-256, and release metadata shape. |
+| NSIS install, launch, reinstall and uninstall | PASS | The v0.2.0 installer started successfully. Reinstall and uninstall preserved a synthetic data marker outside the application directory. |
+| MSI install and uninstall | NOT RUN | The MSI was built and signed. This local run exercised the NSIS lifecycle only. |
+| Live update discovery and installation | NOT YET AVAILABLE | v0.2.0 is built locally but is not published from this verification record. The installed v0.1.0 build has no updater. |
+| GitHub Actions run for this change | NOT RUN | `actionlint` passed locally. Remote CI and signed-tag release checks require the branch and tag to be pushed. |
+| npm production dependency audit | PASS | `pnpm audit --prod --registry=https://registry.npmjs.org --audit-level high` found no high or critical production advisory. |
+| npm development dependency audit | PARTIAL | `GHSA-fc5q-39xc-vjpf` remains on the development-only `picomatch@4.0.7` path. The public npm registry has not published a fixed package. CI permits only this advisory and fails on any other finding. |
+| Rust dependency audit | PASS WITH WARNINGS | `cargo audit --file src-tauri/Cargo.lock --no-yanked --target-os windows --target-arch x86_64` exited successfully with six allowed advisories. Five are unmaintained crate warnings and one concerns glib 0.18.5, which is not used by the Windows runtime. |
+| Formatting and workflow syntax | PASS | `rustfmt --edition 2024 --check src-tauri/src/update.rs`, `actionlint` on all four workflows, `node --check` on release scripts, and `git diff --check` passed. |

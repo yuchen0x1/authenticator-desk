@@ -11,17 +11,20 @@ integrations behind the `desktop` feature.
 
 ## Latest release
 
-<!-- github-release:start -->
+[![Latest stable release](https://img.shields.io/github/v/release/yuchen0x1/authenticator-desk)](https://github.com/yuchen0x1/authenticator-desk/releases/latest)
+[![CI](https://github.com/yuchen0x1/authenticator-desk/actions/workflows/ci.yml/badge.svg)](https://github.com/yuchen0x1/authenticator-desk/actions/workflows/ci.yml)
 
-**[v0.1.0](https://github.com/yuchen0x1/authenticator-desk/releases/tag/v0.1.0)** · 2026-11-18
+[Download for Windows x64](https://github.com/yuchen0x1/authenticator-desk/releases/latest) · [Release history](docs/releases/release-notes.md)
 
-The first Windows release stores TOTP and HOTP accounts in an encrypted local vault. Press Ctrl+Shift+Q to see favorite codes, import accounts from a QR image, or restore an encrypted backup.
+Choose EXE for the per-user installation or MSI if you currently use MSI. Windows 11 x64 is the desktop acceptance target. The CI also exercises the shared Rust core on Linux and macOS.
 
-[Release history](https://github.com/yuchen0x1/authenticator-desk/releases)
+![AUTHENTICATOR DESK codes page](screenshots/03-codes.png)
 
-<!-- github-release:end -->
+Add an account or import a QR image, then open favorite codes with Ctrl+Shift+Q. The protected clipboard clears only the value still owned by the app. Keep an encrypted backup from the Backup page so you can restore the vault on another Windows installation.
 
-Download the Windows x64 [EXE or MSI installer from GitHub Releases](https://github.com/yuchen0x1/authenticator-desk/releases/latest).
+## Updating
+
+Users on v0.1.0 install the next release manually using the same installer family. Signed builds provide **Settings → Application updates** with release notes, download progress and deliberate installation. See the [update and recovery guide](docs/updating.md).
 
 ## Import and migration
 
@@ -37,6 +40,9 @@ Download the Windows x64 [EXE or MSI installer from GitHub Releases](https://git
 
 ## Documentation
 
+- [Maintenance and platform status](docs/maintenance.md)
+- [Authenticator ecosystem research and backlog](docs/research/ecosystem.md)
+- [Contribution workflow](CONTRIBUTING.md) and [private security reporting](SECURITY.md)
 - [docs/security-model.md](docs/security-model.md) — trust boundaries,
   cryptography, lifecycle, and network posture
 - [docs/migration-format-matrix.md](docs/migration-format-matrix.md) —
@@ -67,16 +73,16 @@ pnpm tauri dev
 
 ## Publishing release notes
 
-For a formatted release, write `docs/releases/<tag>.md` with the changes, Windows downloads and upgrade details for that tag. The publisher also accepts a matching version in [the release history](docs/releases/release-notes.md). If neither is available, GitHub generates notes for the tag. The latest published overview appears above.
+Write `docs/releases/<tag>.md` with the changes, Windows downloads and upgrade details, then update the [release history](docs/releases/release-notes.md). A tag from main triggers the signed release workflow after the version and packaging gates pass.
 
 ## Verification
 
 ```powershell
-pnpm test -- --run
+pnpm exec vitest run
 pnpm exec tsc --noEmit
 pnpm build
-cargo test --manifest-path src-tauri/Cargo.toml
-cargo check --manifest-path src-tauri/Cargo.toml --features desktop --bin authenticator-desk
+cargo test --locked --manifest-path src-tauri/Cargo.toml
+cargo check --locked --manifest-path src-tauri/Cargo.toml --features signed-updater --bin authenticator-desk
 ```
 
 The default Rust feature set tests core code without linking the desktop runtime. The `desktop` feature builds the real Tauri entry point when packaging metadata and the Windows icon are present. The main capability grants no filesystem or shell permissions.
@@ -90,3 +96,5 @@ elsewhere; the frontend never chooses arbitrary storage paths.
 ## License
 
 Original source code is licensed under the MIT License. See [LICENSE](LICENSE).
+
+Report product issues through [GitHub Issues](https://github.com/yuchen0x1/authenticator-desk/issues/new/choose). If you forgot the vault or backup password, use a backup whose password you know. There is no password recovery service.

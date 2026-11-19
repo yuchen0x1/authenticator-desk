@@ -1,4 +1,12 @@
-# Release notes — AUTHENTICATOR DESK 0.1.0
+# AUTHENTICATOR DESK release notes
+
+## v0.2.0
+
+- Check for signed Windows updates in Settings. Review the release notes, date and download size before installing.
+- Release downloads include SHA-256 files and separate signed packages for EXE and MSI installations.
+- Install manually when updating from v0.1.0. [Release details](v0.2.0.md) · [Update and recovery guide](../updating.md)
+
+## v0.1.0
 
 Windows x64 · 2026-11-18
 

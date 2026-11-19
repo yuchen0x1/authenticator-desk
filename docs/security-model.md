@@ -1,16 +1,15 @@
 # Security model
 
-Scope: AUTHENTICATOR DESK as implemented on 2026-11-18. Statements below
-describe only what the code does; unverified Windows features are listed in
-`known-limitations.md`.
+Scope covers the v0.2.0 code. See [known limitations](known-limitations.md) for remaining platform acceptance.
 
 ## Trust boundaries
 
 - The Rust core (`src-tauri`) is the only component that reads the SQLite
   vault, derives keys, encrypts or decrypts records, parses imports, and
   writes backups. The React frontend receives typed, redacted view models
-  through Tauri commands and never sees raw secrets, ciphertext, SQL, or the
-  master password.
+  through Tauri commands. Password entry, manual seed entry and file
+  selection temporarily hold user-entered input in the WebView while the
+  application sends it to the backend. Vault read responses are redacted.
 - The frontend never persists the master password, derived key, account
   secret, or plaintext backup. Session material lives in Rust-owned
   zeroizing buffers and is dropped on lock, idle timeout, or exit.
@@ -75,13 +74,11 @@ describe only what the code does; unverified Windows features are listed in
 
 ## Network
 
-- Offline first: the app performs no account sync and uploads nothing. The
-  only optional network call is an explicit time calibration request; all
-  OTP generation otherwise uses the local monotonic-aware clock snapshot
-  that detects wall-clock jumps above 5 seconds.
+- OTP generation uses the local monotonic-aware clock snapshot. An explicit
+  update check or install uses GitHub HTTPS. The app sends no vault contents
+  in either request. See [update trust](updating.md).
 
 ## Known gaps
 
-See `known-limitations.md` for the honest list: unverified Windows Hello,
-no signing or update channel, encrypted third-party migration formats not
-decryptable in this release, and QR/camera constraints.
+Remaining gaps include Windows Hello, Authenticode, encrypted third-party
+imports and camera capture. See [known limitations](known-limitations.md).
