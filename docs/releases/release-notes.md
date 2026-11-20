@@ -1,5 +1,11 @@
 # AUTHENTICATOR DESK release notes
 
+## v0.2.1 (unreleased)
+
+- Limit Vitest to TypeScript test/spec files under `src/`, keeping Node.js test scripts out of the frontend runner.
+- Run the release-context security tests independently with `node --test` in CI.
+- Implement the trusted-invocation allowlist for this repository's version-tag pushes and matching release workflow reference. [Patch details](v0.2.1.md)
+
 ## v0.2.0
 
 - Check for signed Windows updates in Settings. Review the release notes, date and download size before installing.
