@@ -63,6 +63,12 @@ P0: keep signing credentials and real vault/test data out of commits and artifac
 
 A targeted Rust compile initially failed because `rusqlite` cannot read SQLite integers directly as `usize`; it was corrected to an `i64` read plus checked conversion, then targeted and full suites passed. A hash-reporting PowerShell snippet had a parser error; scans had already completed, and only corrected read-only hash collection was rerun. Native accessibility controls were resolved again from fresh full state after stale/delta lookups, not blindly clicked. No failing run was counted as a pass. Feature-specific generated-schema churn was compared to the protected starting state and removed without changing user source.
 
+### First remote push and scanner feedback
+
+The first safety commit `d6d502d6b94356e8cd226a3703d354586ddf9829` was fast-forwarded and pushed to `main`. Security run `44824258560` failed at gitleaks: `generic-api-key` matched the **public RFC 4226 test vector** embedded in `tests/privacy.rs`, not a user credential. Later security steps were skipped in that run and are not counted as passes. The fixture now explicitly encodes RFC Appendix D's public byte vector and additionally asserts HOTP counter 0 equals `755224`; no test assertions or scanner rules were removed, ignored or weakened. The follow-up commit needs its own complete remote run. Production artifacts are unchanged by this test/documentation-only correction.
+
+GitHub also reported the already documented open moderate `glib` advisory (GHSA-wrw7-89jp-8q8g); it was not the cause of the gitleaks failure. The inspected Windows graph excludes `glib`, not all potential platforms.
+
 The older observations below are historical and do not qualify the artifacts above.
 
 ## 2026-11-20 — prepared 0.2.1 repair verification
