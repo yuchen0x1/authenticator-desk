@@ -1,5 +1,60 @@
 # Test report
 
+## 2026-11-21 — 0.3.0 final local regression and explicit-target packaging
+
+This append-only entry records this round's local results. It does not establish remote CI for the exact pending source, a signed release, a Git tag, publication, complete native GUI acceptance, or an old-version live upgrade. No baseline-SHA remote CI result is used to qualify the newer source. The app source version check reported 0.3.0. Local Windows build and regression stdout logs both exited 0.
+
+| Check | Observed result / scope |
+|---|---|
+| Frontend suite | Vitest: **238 passed in 26 files**, no failures. |
+| Node release-trust tests | **39 passed**, zero skipped or failed. |
+| TypeScript / Vite | `tsc --noEmit` and production build passed; 148 modules transformed. Output: CSS 34.79 kB (gzip 8.24 kB), JS 452.68 kB (gzip 138.62 kB). These are artifact sizes, not a speed claim. |
+| Version / diff hygiene | 0.3.0 version check and `git diff --check` passed after restoring generated-schema state; the original 2FAS fixture has no diff. |
+| Rust default suite | **64 library + 63 integration = 127 passed**, zero failures. One subprocess lease helper is ignored in ordinary discovery and explicitly invoked by the passing parent regression. |
+| Desktop feature | **5 passed**. Two default desktop integration tests repeat in this feature run; they are not additional unique tests. |
+| Signed-updater boundaries | **4 passed**; one staged-real-signature artifact test was intentionally ignored because the local run did not have the required release-key artifacts. |
+| Targeted Rust formatting | `rustfmt --edition 2024 --check` for the clipboard production/test files and future-T0 test passed. This is not a whole-repository formatting claim. |
+| Automatic-backup status semantics | Encrypted last-success survives restart and disable; attempt/failure is session/configuration/generation-local; enabling a new configuration resets schedule/`last_run`. Covered by the local regression suite. |
+| Dependency audit | `pnpm audit` reported no known vulnerabilities. Windows-target Rust audit exited 0 with six allowed warnings; exact findings are listed below. An exit-0 allowlist is not a zero-advisory or vulnerability-free result. |
+| Explicit-target Windows build | `pnpm tauri build --ci --target x86_64-pc-windows-msvc -- --locked` completed and built both NSIS and MSI. The packages are unsigned local outputs, not formal release assets. |
+
+### Final explicit-target local artifacts
+
+| Artifact | Bytes | SHA-256 | Authenticode |
+|---|---:|---|---|
+| `authenticator-desk.exe` | 13,874,176 | `DFE1B6BF74B8900AE5D942A1A1BABD3828E7D3054842A796D7404671B190130A` | NotSigned |
+| NSIS `AUTHENTICATOR DESK_0.3.0_x64-setup.exe` | 3,673,264 | `3249CD1457FCD29392C62AC3BB7C53501AA9BE6FF1B8C70284E55FDFAD3D75BA` | NotSigned |
+| MSI `AUTHENTICATOR DESK_0.3.0_x64_en-US.msi` | 5,210,112 | `F79E73340D656FB12616B849087C53BC3EC5922AAC8516406F0452D3F7797CB2` | NotSigned |
+
+Hashes identify only these local artifacts. They are not a published signed build and cannot substitute for a signed release manifest or installer signatures.
+
+### Native and exposure checks
+
+The final explicit-target app was started with an isolated data directory. The process responded, its title matched the expected application title, and the isolated directory remained empty. No vault was created or unlocked; the real user process was not touched. This is a process-start smoke test only, not a GUI workflow or upgrade acceptance.
+
+The native UI broker remained unavailable (connection/socket unavailable while starting), so full native clicks and complete desktop acceptance were not performed. A real localhost:1431 browser DOM check, without mocks, showed the desktop security backend unavailable and instructed opening the desktop app. It does not establish browser-mode support. No genuine prior-version signed install → update → reopen-vault test was run.
+
+A heuristic scan of final `dist/` (3 files, 1 JavaScript artifact) scored 100/A with no findings. The native executable scored 76/C and reported: **PE-SIGN** (no Authenticode publisher signature), **LEAK-INTRANET** (the embedded `http://localhost:1420` development-configuration string; not evidence of a real intranet service or active listener), and informational **PE-INFO** (PE32+, machine `0x8664`, `DllCharacteristics 0xc160`). These are triage signals, not a security certification, exploitability assessment or proof of resistance to reverse engineering. The project is open source; algorithm concealment is not a security boundary. Updater/minisign signing, if configured for a release, is distinct from Authenticode publisher identity.
+
+### Dependency-audit warnings (captured task log)
+
+The audit completed successfully and reported no known npm vulnerabilities. `cargo audit` scanned 578 crate dependencies and exited 0 with **six allowed warnings**:
+
+- Unmaintained `chrono` 0.4.45 (`RUSTSEC-2026-0543`), `proc-macro-error` 1.0.4 (`RUSTSEC-2024-0370`), `zbus_names` 4.3.5 (`RUSTSEC-2026-0371`), `zvariant` 5.15.1 (`RUSTSEC-2026-0370`), and `zvariant_derive` 5.15.1 (`RUSTSEC-2026-0372`).
+- `glib` 0.18.5 unsound iterator implementations (`RUSTSEC-2024-0429`). The prior Windows-target graph review found `glib` absent from that target; this does not qualify Linux desktop use.
+
+Audit stdout was captured in the task session's `call_iHHsDAjsdYIMhPpwfCg2a1hQ__rk16__DOdaNMvdesq1qlO7-stdout.log`. Do not treat allowed warnings as fixed or as proof of no dependency risk.
+
+### Build warnings and release-owner follow-up
+
+Observed build warnings were: Tauri bundle identifier `com.authenticatordesk.app` ends in `.app` (not recommended due to macOS bundle-extension collision), and unsigned-build Rust `UpdateError` variants `Busy`, `Network`, `InvalidRelease`, `Incompatible`, `Integrity`, and `Install` are dead code. The regression log also emitted Git LF-to-CRLF notices for generated desktop/windows schema and clipboard files; generated desktop/windows schema files were restored byte-for-byte from backup, the transient ACL/updater generated difference was removed, and the post-restore diff check passed. The implementation, including the follow-up public-vector fixture below, is committed locally as `8768935d538a1a85f7076f7fd7f10ca41ddbffff`; remote delivery is not established by this local snapshot.
+
+Before any release claim, the release owner must append exact-source commit and tag state, new-source remote Security/CI run URLs/results (including NSIS/MSI clean-runner lifecycle and signed artifact checks), publication/assets/signature/checksum verification, completed native GUI acceptance, and genuine old-version signed update/reopen-vault evidence where required. Do not use remote CI authenticated against a baseline SHA as evidence for this source. Current Git/Tag/Release state is **not complete**.
+
+### Follow-up test-fixture scanner hygiene
+
+After the integrated run, the future-T0 test fixture was changed to derive its public RFC test seed with `otp::encode_base32(...).as_str()` rather than embedding the known scanner-triggering literal. This public test vector is not a user credential or leak. The first targeted compile exposed an `E0277` serialization mismatch for `Zeroizing<String>`; using `.as_str()` corrected the fixture, after which `cargo test --test future_t0` passed **1/1**, targeted `rustfmt --edition 2024 --check` passed, and `git diff --check` passed. This changed test fixture only; production code and the already-built artifacts are unchanged. A local gitleaks executable was unavailable; a basic added-line screen for private-key, GitHub-token and AWS-ID patterns found no matches, but that is not equivalent to Gitleaks or hosted Security. The exact current source still requires its own remote Security run.
+
 ## 2026-11-21 — integrated safety evolution, local qualification
 
 Observed on Windows x64, local date 2026-11-21 (Asia/Shanghai), Node 26.13.1, pnpm 11.20.0, rustc 1.99.1. Local Rust commands used `RUSTUP_TOOLCHAIN=stable` because the separate version-named installation is partially broken; the compiler versions were checked to match. This entry qualifies local source/artifacts only. Remote CI, push and publication state must be established separately.

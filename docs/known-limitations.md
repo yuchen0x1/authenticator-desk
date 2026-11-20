@@ -68,3 +68,13 @@ Updated on 2026-11-21 (Asia/Shanghai). Dated historical acceptance remains in th
   [backlog](../AUTONOMOUS_TASKS.md).
 - Backup publication uses hard-link no-overwrite semantics. FAT32/exFAT and network
   filesystem compatibility have not been qualified; do not assume they work.
+
+## 0.3.0 / 2026-11-21 addendum
+
+This addendum records the current local-source boundaries; the dated historical entries above remain intact.
+
+- Automatic-backup last-success metadata is encrypted and survives restarts and disabling the feature. Attempt/failure status is limited to the current session/configuration/generation. Enabling a new configuration resets its schedule/`last_run`; disabling preserves the last-success record. This is not proof of unattended end-to-end backup recovery on every target filesystem.
+- Secret replacement retry, future-T0 display isolation, source-specific numeric import validation, and ownership-aware bounded clipboard expiry retry were locally regression-tested. They are not proof of broader OS-level erasure or native user-flow acceptance.
+- Full native GUI acceptance was not completed: the UI broker could not connect. An isolated explicit-target executable process responded with the expected title and created no files; it did not create/unlock a vault and the real user process was not touched.
+- The local 0.3.0 Windows executable and NSIS/MSI outputs have no Authenticode signature and are not published release assets. No genuine signed prior-version upgrade/reopen-vault test was run.
+- Shared transactional capacity/backup-limit enforcement, zero-account settings/backup restore UX, import error classification, backup filename collision UX, editing accounts without an issuer, Windows clipboard-history/cloud opt-out, intermediate plaintext-copy zeroization, default algorithm/font-size choices, and non-NTFS/network durability remain follow-ups. See the current [backlog](../AUTONOMOUS_TASKS.md).

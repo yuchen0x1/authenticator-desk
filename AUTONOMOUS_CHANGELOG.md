@@ -59,3 +59,15 @@ Authenticode publisher identity.
 **Preservation note.** The original uncommitted worktree (88 files plus a binary diff)
 was copied to a temporary directory before branching, so no pre-existing edit could be
 lost by this round.
+
+## 2026-11-21 — 0.3.0 reliability follow-up and evidence closeout
+
+This is a new append-only evidence entry. It does not rewrite the inherited 0.2.1 history, claim authorship of inherited changes, or mark the release complete.
+
+**Changed in the 0.3.0 working tree.** Account-edit retries retain replacement-secret intent while clearing the secret input; future-T0 display failures are isolated; Aegis/andOTP/2FAS imports validate present numeric values source-specifically (including legal 2FAS nulls and documented defaults); clipboard expiry uses a single cancellable retry worker with bounded backoff and ownership checks; automatic-backup health persists encrypted last-success while attempt/failure status remains session/configuration/generation-local. Enabling a new configuration resets its schedule/`last_run`; disabling preserves last success. Feature-gated desktop integration tests now execute in CI.
+
+**Observed locally.** Vitest 238/26 files, Node 39, TypeScript/build/version/diff checks passed; Rust default suite 64 library + 63 integration (127 passed; one ignored subprocess helper invoked by its passing parent); desktop feature 5 passed (including two tests repeated by default discovery); signed-updater 4 passed with one staged-signature test intentionally ignored. Explicit-target Windows build produced 0.3.0 NSIS/MSI, all three final artifacts Authenticode `NotSigned`. Dependency audit exited 0 with no known npm vulnerabilities and six allowed Rust audit warnings. Full GUI acceptance was blocked by the unavailable native UI broker; an isolated final-process responding/title smoke created no files and did not create or unlock a vault. See `docs/test-report.md` for exact hashes, warning IDs and test boundaries.
+
+**Git boundary.** The implementation is locally committed as `8768935d538a1a85f7076f7fd7f10ca41ddbffff`.
+
+**Not claimed by this local snapshot.** Remote CI for this exact source, tag/push/release, signed publication, complete GUI/installer lifecycle or genuine old-version signed update/reopen-vault acceptance. Local packages are not formal release assets. Follow-up items and release-owner fields are listed in `AUTONOMOUS_ISSUES.md` and `AUTONOMOUS_TASKS.md`.
