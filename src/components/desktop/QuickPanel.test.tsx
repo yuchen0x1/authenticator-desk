@@ -151,6 +151,36 @@ describe("favorite quick panel lock and visibility lifecycle", () => {
     expect(state.copy).not.toHaveBeenCalled();
   });
 
+  it("shows future TOTP as not active while keeping other OTPs usable", async () => {
+    state.locked=false;
+    state.settings.mockResolvedValue({locale:"en",hide_codes:false});
+    const future={...account,id:"future",account_name:"future",t0:String(BigInt(Math.floor(Date.now()/1000))+3600n)};
+    const hotp={...account,id:"counter",account_name:"counter",kind:"hotp"};
+    state.quickPanelAccounts.mockResolvedValue([future,account,hotp]);
+    state.codes.mockResolvedValue([
+      {...code("111111"),account_id:account.id},
+      {...code("222222"),account_id:hotp.id},
+    ]);
+    render(<QuickPanel />);
+    const futureStatus = await screen.findByText("Not active yet");
+    expect(futureStatus).toBeVisible();
+    expect(futureStatus).toHaveClass("future-t0-status");
+    const futureRow = futureStatus.closest(".quick-panel-row");
+    expect(futureRow).not.toBeNull();
+    expect(futureRow?.querySelector(".quick-panel-code .future-t0-status")).toBe(futureStatus);
+    expect(futureRow?.querySelector(".quick-panel-code span:not(.future-t0-status)")).not.toBeInTheDocument();
+    expect(screen.queryByText("0s")).not.toBeInTheDocument();
+    expect(screen.queryByText("------")).not.toBeInTheDocument();
+    expect(screen.queryByText("654321")).not.toBeInTheDocument();
+    expect(screen.getByRole("button",{name:"Copy code: Example future"})).toBeDisabled();
+    expect(screen.getByText("111111")).toBeVisible();
+    expect(screen.getByText("222222")).toBeVisible();
+    fireEvent.click(screen.getByRole("button",{name:"Copy code: Example future"}));
+    expect(state.copy).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button",{name:"Copy code: Example alice"}));
+    await waitFor(()=>expect(state.copy).toHaveBeenCalledWith(account.id,"111111"));
+  });
+
   it("does not show an expired OTP or allow copying when a delayed refresh has expired", async () => {
     state.locked=false;
     state.codes.mockResolvedValue([code("654321",Math.floor(Date.now()/1000)-12)]);

@@ -26,6 +26,15 @@ Add an account or import a QR image, then open favorite codes with Ctrl+Shift+Q.
 
 Users on v0.1.0 install the next release manually using the same installer family. Signed builds provide **Settings → Application updates** with release notes, download progress and deliberate installation. Back up first and fully exit all running versions before upgrading: the new per-vault writer guard cannot coordinate with older clients that lack it. See the [update and recovery guide](docs/updating.md).
 
+## Reliability and backup health
+
+- A future-start TOTP is shown as not active yet; other TOTP/HOTP codes remain available. Copy stays unavailable for that account until T0.
+- After a failed secret replacement, re-enter the new secret or explicitly cancel replacement. Retrying an empty field cannot silently change that operation into keeping the old secret.
+- Backup and Settings show the latest successful automatic backup separately from the latest attempt/error in the current unlocked session. Status refreshes every 30 seconds or on request without extending the vault idle timeout or overwriting form drafts. Attempt health resets on lock/restart/reconfiguration. Last success survives restarts; enabling a new configuration resets its schedule.
+- Clipboard expiry cleanup retries temporary contention with bounded ownership-aware backoff. It never repeats a copy or clears a later user-owned value. Permanent OS contention and clipboard-history/cloud copies remain outside the cleanup guarantee.
+
+The SQLite schema and `.authdesk` format are unchanged. See the [six-project reliability review](docs/research/2026-11-21-reliability-review.md) and [verification evidence](docs/test-report.md).
+
 ## Import and migration
 
 - Textarea paste and file import both route through the same
@@ -37,6 +46,7 @@ Users on v0.1.0 install the next release manually using the same installer famil
 - Encrypted Aegis/2FAS/andOTP/Ente backups and FreeOTP backups are detected
   and rejected with `unsupported_encrypted_format`; no bypass is attempted.
   See [docs/migration-format-matrix.md](docs/migration-format-matrix.md).
+- Numeric defaults follow each source's contract: absent fields can default, and 2FAS explicitly permits null digits/period. Negative, fractional, string, out-of-range or otherwise invalid OTP parameters are invalid rows, not silently changed to another counter/period/digit count. HOTP never guesses a missing/null 2FAS counter.
 
 ## Documentation
 
@@ -79,9 +89,11 @@ Write `docs/releases/<tag>.md` with the changes, Windows downloads and upgrade d
 
 ```powershell
 pnpm exec vitest run
+node --test scripts/*.test.mjs
 pnpm exec tsc --noEmit
 pnpm build
 cargo test --locked --manifest-path src-tauri/Cargo.toml
+cargo test --locked --manifest-path src-tauri/Cargo.toml --features desktop --test desktop
 cargo check --locked --manifest-path src-tauri/Cargo.toml --features signed-updater --bin authenticator-desk
 ```
 

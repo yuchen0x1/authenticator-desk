@@ -81,6 +81,11 @@ fn json_u64(value: &serde_json::Value, key: &str) -> Option<u64> {
     value.get(key).and_then(serde_json::Value::as_u64)
 }
 
+/// Only absent fields may default; present values must be exact u64 integers.
+fn json_optional_u64(value: Option<&serde_json::Value>) -> Result<Option<u64>, ()> {
+    value.map(|value| value.as_u64().ok_or(())).transpose()
+}
+
 fn invalid_item(error_code: &str) -> MigrationItem {
     MigrationItem {
         input: None,

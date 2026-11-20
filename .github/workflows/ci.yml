@@ -81,6 +81,9 @@ jobs:
       - name: Rust tests
         run: cargo +1.99.1 test --locked --manifest-path src-tauri/Cargo.toml
 
+      - name: Check desktop integration contracts
+        run: cargo +1.99.1 test --locked --manifest-path src-tauri/Cargo.toml --features desktop --test desktop
+
       - name: Check updater security boundaries
         run: cargo +1.99.1 test --locked --manifest-path src-tauri/Cargo.toml --features signed-updater --lib update::signed::tests
 

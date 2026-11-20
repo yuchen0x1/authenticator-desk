@@ -88,7 +88,7 @@ impl AppState {
         if self.accounts.settings()?.hide_codes {
             return Ok(Vec::new());
         }
-        self.accounts.generate_codes(ids)
+        self.accounts.generate_available_codes(ids)
     }
 
     pub fn advance_visible_hotp(&self, id: &str) -> AppResult<accounts::CodeView> {

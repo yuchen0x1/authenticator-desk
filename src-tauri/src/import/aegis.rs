@@ -3,7 +3,8 @@ use serde_json::Value;
 use crate::{AppError, AppResult, accounts::AccountInput, otp::decode_base32};
 
 use super::{
-    MigrationItem, MigrationPreview, MigrationAdapter, invalid_item, json_str, json_u64, parse_json,
+    MigrationItem, MigrationPreview, MigrationAdapter, invalid_item, json_optional_u64, json_str,
+    json_u64, parse_json,
 };
 
 /// Reader for Aegis plain JSON vaults (and Aegis-shaped deskOTP plain backups).
@@ -55,8 +56,14 @@ fn map_entry(entry: &Value) -> MigrationItem {
             error_code: Some("unsupported_algorithm".into()),
         };
     }
-    let digits = json_u64(info, "digits").unwrap_or(6);
-    let period_secs = json_u64(info, "period").unwrap_or(30);
+    let (Ok(digits), Ok(period_secs)) = (
+        json_optional_u64(info.get("digits")),
+        json_optional_u64(info.get("period")),
+    ) else {
+        return invalid_item("invalid_parameters");
+    };
+    let digits = digits.unwrap_or(6);
+    let period_secs = period_secs.unwrap_or(30);
     let kind = entry_type.to_string();
     let mut input = AccountInput::default();
     input.kind = kind.clone();
@@ -64,7 +71,10 @@ fn map_entry(entry: &Value) -> MigrationItem {
     input.digits = digits.min(u8::MAX as u64) as u8;
     input.period_secs = period_secs.min(u32::MAX as u64) as u32;
     if kind == "hotp" {
-        input.hotp_counter = json_u64(info, "counter").unwrap_or(0).to_string();
+        let Ok(counter) = json_optional_u64(info.get("counter")) else {
+            return invalid_item("invalid_parameters");
+        };
+        input.hotp_counter = counter.unwrap_or(0).to_string();
     }
     let label = name.as_deref().unwrap_or("");
     let (label_issuer, account) = label

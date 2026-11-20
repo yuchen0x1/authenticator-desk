@@ -320,6 +320,75 @@ fn twofas_adapter_applies_defaults_and_rejects_steam_tokens() {
 }
 
 #[test]
+fn twofas_nullable_numeric_shape_defaults_and_commits() {
+    let bytes = serde_json::to_vec(&serde_json::json!({
+        "schemaVersion": 4,
+        "services": [
+            {
+                "name": "Demo",
+                "secret": "JBSWY3DPEHPK3PXP",
+                "otp": {
+                    "label": "Demo:nullable@example.com",
+                    "account": "nullable@example.com",
+                    "issuer": "Demo",
+                    "digits": null,
+                    "period": null,
+                    "algorithm": null,
+                    "counter": null,
+                    "tokenType": "TOTP"
+                }
+            },
+            {
+                "name": "Demo HOTP null",
+                "secret": "JBSWY3DPEHPK3PXP",
+                "otp": {
+                    "account": "hotp-null@example.com",
+                    "issuer": "Demo",
+                    "digits": 6,
+                    "period": 30,
+                    "algorithm": "SHA1",
+                    "counter": null,
+                    "tokenType": "HOTP"
+                }
+            },
+            {
+                "name": "Demo HOTP string",
+                "secret": "JBSWY3DPEHPK3PXP",
+                "otp": {
+                    "account": "hotp-string@example.com",
+                    "issuer": "Demo",
+                    "digits": 6,
+                    "period": 30,
+                    "algorithm": "SHA1",
+                    "counter": "0",
+                    "tokenType": "HOTP"
+                }
+            }
+        ]
+    }))
+    .unwrap();
+    let adapter = TwoFasAdapter;
+    let parsed = MigrationAdapter::preview(&adapter, &bytes, None).unwrap();
+    let nullable = parsed.items[0].input.as_ref().unwrap();
+    assert_eq!(nullable.digits, 6);
+    assert_eq!(nullable.period_secs, 30);
+    assert!(parsed.items[1].input.is_none());
+    assert_eq!(parsed.items[1].error_code.as_deref(), Some("missing_counter"));
+    assert!(parsed.items[2].input.is_none());
+    assert_eq!(parsed.items[2].error_code.as_deref(), Some("invalid_parameters"));
+
+    let (path, _vault, accounts, imports) = harness();
+    let preview = imports.preview_file(bytes).unwrap();
+    assert_eq!(preview.items[0].status, "new");
+    assert_eq!(imports.commit_import(&preview.preview_id, &[0]).unwrap(), 1);
+    let stored = accounts.list_accounts(AccountQuery::default()).unwrap();
+    assert_eq!(stored.len(), 1);
+    assert_eq!(stored[0].digits, 6);
+    assert_eq!(stored[0].period_secs, 30);
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
 fn rejects_encrypted_twofas_backup() {
     let (path, _vault, _accounts, imports) = harness();
     assert!(matches!(
@@ -459,6 +528,192 @@ fn cancel_and_lock_drop_only_the_matching_pending_preview() {
         .unwrap();
     assert!(imports.commit_import(&stale.preview_id, &[0]).is_err());
     let _ = std::fs::remove_file(&path);
+}
+
+// Keep numeric tokens as raw JSON so overflow and fractional representations
+// reach the adapters unchanged, rather than being rounded by test setup.
+fn numeric_backup(format: &str, rows: &[(&str, &str)]) -> Vec<u8> {
+    let entries = rows
+        .iter()
+        .enumerate()
+        .map(|(index, (kind, parameters))| {
+            let parameters = if parameters.is_empty() {
+                String::new()
+            } else {
+                format!(",{parameters}")
+            };
+            match format {
+                "aegis" => format!(
+                    r#"{{"type":"{kind}","name":"Demo:row-{index}","info":{{"secret":"JBSWY3DPEHPK3PXP"{parameters}}}}}"#
+                ),
+                "andotp" => format!(
+                    r#"{{"type":"{}","label":"row-{index}","issuer":"Demo","secret":"JBSWY3DPEHPK3PXP"{parameters}}}"#,
+                    kind.to_uppercase()
+                ),
+                "twofas" => format!(
+                    r#"{{"name":"Demo","secret":"JBSWY3DPEHPK3PXP","otp":{{"account":"row-{index}","tokenType":"{}"{parameters}}}}}"#,
+                    kind.to_uppercase()
+                ),
+                _ => panic!("unexpected numeric test format"),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    match format {
+        "aegis" => format!(r#"{{"db":{{"entries":[{entries}]}}}}"#),
+        "andotp" => format!("[{entries}]"),
+        "twofas" => format!(r#"{{"services":[{entries}]}}"#),
+        _ => panic!("unexpected numeric test format"),
+    }
+    .into_bytes()
+}
+
+#[test]
+fn numeric_defaults_apply_only_to_omitted_fields() {
+    for adapter in [&AegisAdapter as &dyn MigrationAdapter, &AndOtpAdapter, &TwoFasAdapter] {
+        let bytes = numeric_backup(adapter.name(), &[("totp", ""), ("hotp", "")]);
+        let preview = adapter.preview(&bytes, None).unwrap();
+        let totp = preview.items[0].input.as_ref().unwrap();
+        assert_eq!(totp.digits, 6, "{}", adapter.name());
+        assert_eq!(totp.period_secs, 30, "{}", adapter.name());
+        if adapter.name() == "twofas" {
+            assert!(preview.items[1].input.is_none());
+            assert_eq!(preview.items[1].error_code.as_deref(), Some("missing_counter"));
+        } else {
+            let hotp = preview.items[1].input.as_ref().unwrap();
+            assert_eq!(hotp.digits, 6);
+            assert_eq!(hotp.period_secs, 30);
+            assert_eq!(hotp.hotp_counter, "0");
+        }
+    }
+}
+
+fn assert_invalid_numeric_fields(adapter: &dyn MigrationAdapter) {
+    for (field, kind, invalid_values) in [
+        (
+            "digits",
+            "totp",
+            &[
+                "-1", "\"6\"", "null", "6.5", "6.0", "18446744073709551616",
+                "true", "[]", "{}", "0", "5", "9", "256", "18446744073709551615",
+            ][..],
+        ),
+        (
+            "period",
+            "totp",
+            &[
+                "-1", "\"30\"", "null", "30.5", "30.0", "18446744073709551616",
+                "true", "[]", "{}", "0", "86401", "4294967296", "18446744073709551615",
+            ][..],
+        ),
+        (
+            "counter",
+            "hotp",
+            &[
+                "-1", "\"0\"", "null", "0.5", "0.0", "18446744073709551616",
+                "true", "[]", "{}",
+            ][..],
+        ),
+    ] {
+        for value in invalid_values {
+            let parameters = format!(r#""{field}":{value}"#);
+            let bytes = numeric_backup(adapter.name(), &[(kind, &parameters)]);
+            let preview = adapter.preview(&bytes, None).unwrap();
+            assert_eq!(preview.items.len(), 1);
+            if adapter.name() == "twofas" && *value == "null" {
+                if field == "counter" {
+                    assert!(preview.items[0].input.is_none());
+                    assert_eq!(
+                        preview.items[0].error_code.as_deref(),
+                        Some("missing_counter")
+                    );
+                } else {
+                    let input = preview.items[0].input.as_ref().unwrap();
+                    assert_eq!(input.digits, 6);
+                    assert_eq!(input.period_secs, 30);
+                }
+                continue;
+            }
+            assert!(
+                preview.items[0].input.is_none(),
+                "{} must reject {field}={value}",
+                adapter.name()
+            );
+            assert_eq!(
+                preview.items[0].error_code.as_deref(),
+                Some("invalid_parameters"),
+                "{} must give a safe reason for {field}={value}",
+                adapter.name()
+            );
+        }
+    }
+}
+
+#[test]
+fn aegis_rejects_present_invalid_numeric_fields() {
+    assert_invalid_numeric_fields(&AegisAdapter);
+}
+
+#[test]
+fn andotp_rejects_present_invalid_numeric_fields() {
+    assert_invalid_numeric_fields(&AndOtpAdapter);
+}
+
+#[test]
+fn twofas_rejects_present_invalid_numeric_fields() {
+    assert_invalid_numeric_fields(&TwoFasAdapter);
+}
+
+#[test]
+fn hotp_numeric_counters_preserve_the_full_u64_range() {
+    for adapter in [&AegisAdapter as &dyn MigrationAdapter, &AndOtpAdapter, &TwoFasAdapter] {
+        for counter in [0, 9_007_199_254_740_993, u64::MAX] {
+            let parameters = format!(r#""digits":8,"period":60,"counter":{counter}"#);
+            let bytes = numeric_backup(adapter.name(), &[("hotp", &parameters)]);
+            let preview = adapter.preview(&bytes, None).unwrap();
+            let input = preview.items[0].input.as_ref().unwrap();
+            assert_eq!(input.hotp_counter, counter.to_string(), "{}", adapter.name());
+            assert_eq!(input.digits, 8);
+            assert_eq!(input.period_secs, 60);
+        }
+    }
+}
+
+#[test]
+fn mixed_numeric_rows_preview_and_commit_only_valid_accounts() {
+    for format in ["aegis", "andotp", "twofas"] {
+        let (path, vault, accounts, imports) = harness();
+        let bytes = numeric_backup(
+            format,
+            &[
+                ("totp", ""),
+                ("totp", r#""digits":"6""#),
+                ("hotp", r#""counter":18446744073709551615"#),
+                ("totp", r#""period":-1"#),
+                ("hotp", r#""counter":"18446744073709551615""#),
+            ],
+        );
+        let preview = imports.preview_file(bytes.clone()).unwrap();
+        assert_eq!(preview.format, format);
+        let statuses: Vec<_> = preview.items.iter().map(|row| row.status.as_str()).collect();
+        assert_eq!(statuses, ["new", "invalid", "new", "invalid", "invalid"]);
+        for index in [1, 3, 4] {
+            assert_eq!(preview.items[index].error_code.as_deref(), Some("invalid_parameters"));
+        }
+        assert!(matches!(
+            imports.commit_import(&preview.preview_id, &[0, 1]),
+            Err(AppError::InvalidInput)
+        ));
+        assert!(accounts.list_accounts(AccountQuery::default()).unwrap().is_empty());
+        let preview = imports.preview_file(bytes).unwrap();
+        assert_eq!(imports.commit_import(&preview.preview_id, &[0, 2]).unwrap(), 2);
+        let stored = accounts.list_accounts(AccountQuery::default()).unwrap();
+        assert_eq!(stored.len(), 2);
+        let hotp = stored.iter().find(|row| row.kind == "hotp").unwrap();
+        assert_eq!(hotp.hotp_counter, u64::MAX.to_string());
+        vault.lock_vault().unwrap();
+        let _ = std::fs::remove_file(&path);
+    }
 }
 
 #[test]

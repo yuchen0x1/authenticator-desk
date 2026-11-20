@@ -4,6 +4,7 @@ import { accountCommands, desktopCommands, settingsCommands, vaultCommands } fro
 import { readCachedTheme } from "../../lib/uiPrefs";
 import type { AccountView, CodeView } from "../../lib/types";
 import { getMessages } from "../../i18n";
+import { futureT0Message, isFutureTotp } from "../../i18n/futureT0";
 
 type PanelState = "loading" | "ready" | "locked" | "error" | "unavailable";
 
@@ -143,9 +144,11 @@ export function QuickPanel() {
   const visible = useMemo(() => accounts.filter((item) => `${item.issuer} ${item.account_name}`.toLowerCase().includes(search.toLowerCase())), [accounts, search]);
   const byId = new Map(codes.map((item) => [item.account_id, item]));
   function usableCode(account: AccountView) {
+    const currentUnix = Math.max(now, Math.floor(Date.now() / 1000));
+    const futureT0 = isFutureTotp(account, currentUnix);
     const code = byId.get(account.id);
-    const remaining = code ? Math.max(0, code.remaining_secs - Math.max(0, Math.max(now, Math.floor(Date.now() / 1000)) - code.clock_offset_secs - code.generated_at)) : 0;
-    return { code: !masked && code && (account.kind === "hotp" || remaining > 0) ? code : undefined, remaining };
+    const remaining = code ? Math.max(0, code.remaining_secs - Math.max(0, currentUnix - code.clock_offset_secs - code.generated_at)) : 0;
+    return { code: !masked && !futureT0 && code && (account.kind === "hotp" || remaining > 0) ? code : undefined, remaining, futureT0 };
   }
   async function copy(account: AccountView) {
     const currentCode = usableCode(account).code;
@@ -179,9 +182,9 @@ export function QuickPanel() {
     {copyError && <p className="quick-panel-error" role="alert">{t.desktop.copyError}</p>}
     <p className="visually-hidden" role="status" aria-live="polite">{copyAnnouncement}</p>
     {phase === "loading" ? <div className="quick-panel-empty" role="status">{t.shell.checking}</div> : phase === "locked" ? <div className="quick-panel-empty" role="status">{t.shell.locked}</div> : phase === "error" || phase === "unavailable" ? <div className="quick-panel-empty"><p role="alert">{phase === "unavailable" ? t.shell.unavailable : t.status.error}</p><button className="button button-subtle" onClick={() => retry.current()}>{t.desktop.retry}</button></div> : visible.length === 0 ? <div className="quick-panel-empty" role="status">{search ? t.pages.noMatch : t.pages.empty}</div> : <div className="quick-panel-list">{visible.map((account) => {
-      const {code,remaining} = usableCode(account);
+      const {code,remaining,futureT0} = usableCode(account);
       const name = `${account.issuer} ${account.account_name}`;
-      return <article className="quick-panel-row" key={account.id}><div className="min-w-0 flex-1"><strong className="block truncate">{account.issuer}</strong><span className="block truncate text-xs text-[var(--muted)]">{account.account_name}</span></div><div className="quick-panel-code"><code aria-hidden={masked || undefined}>{masked ? "•".repeat(account.digits) : code?.code ?? "-".repeat(account.digits)}</code>{masked && <span className="visually-hidden">{t.status.hiddenCode}</span>}{account.kind === "totp" && <span>{code ? remaining : 0}s</span>}</div><button className="button button-subtle" aria-label={`${copied === account.id ? t.status.copied : t.actions.copy}: ${name}`} disabled={!code} onClick={() => void copy(account)}>{code && copied === account.id ? t.status.copied : t.actions.copy}</button></article>;
+      return <article className="quick-panel-row" key={account.id}><div className="min-w-0 flex-1"><strong className="block truncate">{account.issuer}</strong><span className="block truncate text-xs text-[var(--muted)]">{account.account_name}</span></div><div className="quick-panel-code">{futureT0 && !masked ? <span className="future-t0-status text-sm text-[var(--muted)] workspace-wrap">{futureT0Message(locale)}</span> : <code aria-hidden={masked || undefined}>{masked ? "•".repeat(account.digits) : code?.code ?? "-".repeat(account.digits)}</code>}{masked && <span className="visually-hidden">{t.status.hiddenCode}</span>}{account.kind === "totp" && !futureT0 && <span>{code ? `${remaining}s` : "0s"}</span>}</div><button className="button button-subtle" aria-label={`${copied === account.id ? t.status.copied : t.actions.copy}: ${name}`} disabled={!code} onClick={() => void copy(account)}>{code && copied === account.id ? t.status.copied : t.actions.copy}</button></article>;
     })}</div>}
   </main>;
 }

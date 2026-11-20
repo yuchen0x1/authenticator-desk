@@ -316,6 +316,66 @@ fn automatic_backup_preserves_utf8_password_and_never_overwrites() {
 }
 
 #[test]
+fn automatic_backup_health_tracks_failure_recovery_and_session_boundaries() {
+    let (dir, vault, accounts, backup) = fixture();
+    let target = dir.join("automatic");
+    let start = 2_000_000_000;
+    let status = backup.configure_auto_backup(
+        true, target.clone(), SecretString::from("synthetic-backup-password"), 1, 3,
+    ).unwrap();
+    assert!(status.last_attempt.is_none());
+    assert!(status.last_error.is_none());
+    backup.run_auto_backup(start).unwrap().unwrap();
+    assert!(backup.run_auto_backup(start + 1).unwrap().is_none());
+    let status = backup.auto_backup_status().unwrap();
+    assert_eq!(status.last_run, Some(start));
+    assert_eq!(status.last_attempt, Some(start));
+    assert!(status.last_error.is_none());
+
+    let held = dir.join("temporarily-unavailable");
+    std::fs::rename(&target, &held).unwrap();
+    std::fs::write(&target, b"not a directory").unwrap();
+    assert!(matches!(backup.run_auto_backup(start + 3600), Err(AppError::Storage)));
+    let status = backup.auto_backup_status().unwrap();
+    assert_eq!(status.last_run, Some(start), "a failure is not a successful backup");
+    assert_eq!(status.last_attempt, Some(start + 3600));
+    assert_eq!(status.last_error, Some("storage"));
+    let serialized = serde_json::to_string(&status).unwrap();
+    assert!(!serialized.contains("synthetic-backup-password"));
+    assert!(!serialized.contains(&target.to_string_lossy().to_string()));
+    accounts.create_account(input("still-usable")).unwrap();
+    assert_eq!(backup.auto_backup_status().unwrap().last_error, Some("storage"), "ordinary vault revisions retain health");
+
+    std::fs::remove_file(&target).unwrap();
+    std::fs::rename(&held, &target).unwrap();
+    backup.run_auto_backup(start + 3601).unwrap().unwrap();
+    let revision = vault.revision().unwrap();
+    let status = backup.auto_backup_status().unwrap();
+    assert_eq!(status.last_run, Some(start + 3601));
+    assert_eq!(status.last_attempt, Some(start + 3601));
+    assert!(status.last_error.is_none());
+    assert_eq!(vault.revision().unwrap(), revision, "status polling is read-only");
+
+    vault.lock_vault().unwrap();
+    let status = backup.auto_backup_status().unwrap();
+    assert!(status.paused_locked);
+    assert!(status.last_attempt.is_none() && status.last_run.is_none() && status.last_error.is_none());
+    vault.unlock_vault(SecretString::from("vault-test")).unwrap();
+    let status = backup.auto_backup_status().unwrap();
+    assert_eq!(status.last_run, Some(start + 3601), "the existing success timestamp persists");
+    assert!(status.last_attempt.is_none(), "attempt health belongs to the prior session");
+    backup.run_auto_backup(start + 7201).unwrap().unwrap();
+    assert!(backup.auto_backup_status().unwrap().last_attempt.is_some());
+    let status = backup.configure_auto_backup(false, PathBuf::new(), SecretString::from(""), 0, 0).unwrap();
+    assert!(!status.enabled);
+    assert!(status.last_attempt.is_none() && status.last_error.is_none());
+    vault.set_idle_timeout(std::time::Duration::from_millis(1)).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    assert!(backup.auto_backup_status().unwrap().paused_locked, "polling cannot revive an expired idle session");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn retention_removes_only_manifest_proven_files_from_the_same_vault() {
     let (dir_a, vault_a, _, backup_a) = fixture();
     let shared = dir_a.join("shared");
