@@ -19,6 +19,7 @@ jobs:
       - name: Verify latest release and collect upstream updates
         env:
           GH_TOKEN: ${{ github.token }}
+          AUTHDESK_VERIFY_PUBLIC_KEY: ${{ vars.AUTHDESK_UPDATER_PUBLIC_KEY }}
         run: |
           tag="$(gh release view --json tagName --jq .tagName)"
           echo "## Stable release $tag" >> "$GITHUB_STEP_SUMMARY"

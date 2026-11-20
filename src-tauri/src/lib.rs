@@ -1,7 +1,7 @@
 pub mod accounts;
 pub mod backup;
-pub mod commands;
 pub mod clipboard;
+pub mod commands;
 pub mod desktop;
 mod error;
 pub mod import;
@@ -10,9 +10,9 @@ pub mod qr;
 pub mod security;
 pub mod services;
 pub mod storage;
-pub mod vault;
 #[cfg(all(feature = "desktop", windows))]
 mod update;
+pub mod vault;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
@@ -70,12 +70,38 @@ impl AppState {
     pub fn bind_app_data_dir(&self, app_data_dir: &Path) -> AppResult<()> {
         self.vault
             .configure_path(commands::resolve_vault_path(app_data_dir))?;
-        *self.app_data_dir.write().map_err(|_| AppError::Storage)? = Some(app_data_dir.to_path_buf());
+        *self.app_data_dir.write().map_err(|_| AppError::Storage)? =
+            Some(app_data_dir.to_path_buf());
         Ok(())
     }
 
     pub fn data_dir(&self) -> AppResult<PathBuf> {
-        self.app_data_dir.read().map_err(|_| AppError::Storage)?.clone().ok_or(AppError::NotFound)
+        self.app_data_dir
+            .read()
+            .map_err(|_| AppError::Storage)?
+            .clone()
+            .ok_or(AppError::NotFound)
+    }
+
+    pub fn visible_codes(&self, ids: &[String]) -> AppResult<Vec<accounts::CodeView>> {
+        let _action = self.desktop_action.lock().map_err(|_| AppError::Storage)?;
+        if self.accounts.settings()?.hide_codes {
+            return Ok(Vec::new());
+        }
+        self.accounts.generate_codes(ids)
+    }
+
+    pub fn advance_visible_hotp(&self, id: &str) -> AppResult<accounts::CodeView> {
+        let _action = self.desktop_action.lock().map_err(|_| AppError::Storage)?;
+        if self.accounts.settings()?.hide_codes {
+            return Err(AppError::InvalidParameters);
+        }
+        self.accounts.advance_hotp(id)
+    }
+
+    pub fn save_preferences(&self, settings: accounts::AppSettings) -> AppResult<()> {
+        let _action = self.desktop_action.lock().map_err(|_| AppError::Storage)?;
+        self.accounts.save_settings(settings)
     }
 
     pub fn lock(&self) -> AppResult<()> {
@@ -94,6 +120,9 @@ impl AppState {
             self.imports.clear()?;
             self.backups.clear()?;
             let _ = self.clipboard.clear_owned();
+        } else {
+            self.imports.cleanup_expired()?;
+            self.backups.cleanup_expired()?;
         }
         Ok(expired)
     }
@@ -131,7 +160,9 @@ pub fn run() {
         .manage(AppState::default())
         .on_window_event(desktop::handle_window_event)
         .setup(|app| {
-            let app_data_dir = std::env::var_os("AUTHDESK_DATA_DIR").map(PathBuf::from).unwrap_or(app.path().app_data_dir()?);
+            let app_data_dir = std::env::var_os("AUTHDESK_DATA_DIR")
+                .map(PathBuf::from)
+                .unwrap_or(app.path().app_data_dir()?);
             app.state::<AppState>().bind_app_data_dir(&app_data_dir)?;
             desktop::setup(app)?;
             let handle = app.handle().clone();
@@ -145,14 +176,20 @@ pub fn run() {
                     let _ = state.maintenance_tick();
                     let status = state.vault.status();
                     if status.locked && status.generation != last_generation {
-                        if let Some(window) = handle.get_webview_window("quick-panel") { let _ = window.hide(); }
+                        if let Some(window) = handle.get_webview_window("quick-panel") {
+                            let _ = window.hide();
+                        }
                         let _ = handle.emit("vault://locked", ());
                     }
                     last_generation = status.generation;
                     seconds += 1;
                     if seconds >= 60 {
                         seconds = 0;
-                        if !status.locked { let _ = state.backups.run_auto_backup(chrono::Utc::now().timestamp()); }
+                        if !status.locked {
+                            let _ = state
+                                .backups
+                                .run_auto_backup(chrono::Utc::now().timestamp());
+                        }
                     }
                 }
             });
@@ -186,12 +223,15 @@ pub fn run() {
             commands::platform_templates,
             commands::preview_import,
             commands::preview_import_file,
+            commands::pick_import_file,
             commands::commit_import,
+            commands::cancel_import_preview,
             commands::activity_touch,
             commands::change_password,
             commands::backup_create,
             commands::backup_preview_restore,
             commands::backup_apply_restore,
+            commands::backup_cancel_preview,
             commands::backup_auto_status,
             commands::backup_configure_auto,
             commands::backup_list,

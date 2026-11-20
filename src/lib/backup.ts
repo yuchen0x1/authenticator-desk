@@ -10,6 +10,7 @@ export const backupCommands = {
   create:(password:string)=>tauriInvoke<BackupSummary|null>("backup_create",{password}),
   preview:(password:string,mode:RestoreMode)=>tauriInvoke<RestorePreview|null>("backup_preview_restore",{password,mode}),
   restore:(previewId:string,accountIndices:number[],confirmReplace:boolean)=>tauriInvoke<{restored_accounts:number;restored_categories:number;mode:RestoreMode}>("backup_apply_restore",{previewId,selection:{account_indices:accountIndices,confirm_replace:confirmReplace}}),
+  cancel:(previewId:string)=>tauriInvoke<void>("backup_cancel_preview",{previewId}),
   status:()=>tauriInvoke<AutoBackupStatus>("backup_auto_status"),
   configure:(enabled:boolean,password:string,intervalHours:number,retention:number)=>tauriInvoke<AutoBackupStatus|null>("backup_configure_auto",{enabled,password,intervalHours,retention}),
   list:()=>tauriInvoke<BackupFileView[]|null>("backup_list"),

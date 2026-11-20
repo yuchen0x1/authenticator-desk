@@ -19,7 +19,7 @@ export const accountCommands = {
  create:(input:AccountInput)=>tauriInvoke<AccountView>("create_account",{input:accountCreateSchema.parse(input)}), update:(id:string,input:AccountInput)=>tauriInvoke<AccountView>("update_account",{id,input:accountInputSchema.parse(input)}),
  remove:(ids:string[])=>tauriInvoke<void>("delete_accounts",{ids}), favorite:(id:string,favorite:boolean)=>tauriInvoke<void>("set_favorite",{id,favorite}),
  move:(ids:string[],categoryId:string|null)=>tauriInvoke<void>("move_accounts",{ids,categoryId}), reorder:(ids:string[])=>tauriInvoke<void>("reorder_accounts",{ids}), codes:(ids:string[])=>tauriInvoke<CodeView[]>("generate_codes",{ids}), advanceHotp:(id:string)=>tauriInvoke<CodeView>("advance_hotp",{id}),
- copy:(accountId:string)=>tauriInvoke<{token:string}>("copy_code",{accountId}),
+ copy:(accountId:string,expectedCode?:string)=>tauriInvoke<{token:string}>("copy_code",{accountId,...(expectedCode===undefined?{}:{expectedCode})}),
 };
 export const vaultCommands = {
  status:()=>tauriInvoke<{exists:boolean;locked:boolean;generation:number;revision:number}>("vault_status"),
@@ -31,7 +31,7 @@ export const vaultCommands = {
 export const categoryCommands = {list:()=>tauriInvoke<CategoryView[]>("list_categories"),save:(id:string|null,name:string,color:string)=>tauriInvoke<CategoryView>("save_category",{id,name,color}),remove:(id:string)=>tauriInvoke<void>("delete_category",{id})};
 export const settingsCommands = {get:()=>tauriInvoke<AppSettings>("settings"),save:(settings:AppSettings)=>tauriInvoke<void>("save_settings",{settings})};
 export const activityCommands = {events:(limit=100)=>tauriInvoke<AuditEvent[]>("audit_events",{limit}),recordCopy:(accountId:string)=>tauriInvoke<void>("record_copy",{accountId}),dashboard:()=>tauriInvoke<Dashboard>("dashboard"),touch:()=>tauriInvoke<void>("activity_touch")};
-export const importCommands = {preview:(text:string)=>tauriInvoke<ImportPreview>("preview_import",{text:importTextSchema.parse(text)}),previewFile:(payloadB64:string)=>tauriInvoke<ImportPreview>("preview_import_file",{payloadB64:importFileSchema.parse(payloadB64)}),commit:(previewId:string,selection:number[])=>tauriInvoke<number>("commit_import",{previewId,selection})};
+export const importCommands = {preview:(text:string)=>tauriInvoke<ImportPreview>("preview_import",{text:importTextSchema.parse(text)}),previewFile:(payloadB64:string)=>tauriInvoke<ImportPreview>("preview_import_file",{payloadB64:importFileSchema.parse(payloadB64)}),commit:(previewId:string,selection:number[])=>tauriInvoke<number>("commit_import",{previewId,selection}),cancel:(previewId:string)=>tauriInvoke<void>("cancel_import_preview",{previewId})};
 export const platformTemplates = ()=>tauriInvoke<PlatformTemplate[]>("platform_templates");
 export const changeMasterPassword = (current:string,next:string)=>tauriInvoke<void>("change_password",{current,next});
 
@@ -44,6 +44,7 @@ export const desktopCommands = {
  showQuickPanel:()=>tauriInvoke<void>("show_quick_panel"),
  showMain:()=>tauriInvoke<void>("show_main_window"),
  quickPanelAccounts:()=>tauriInvoke<AccountView[]>("quick_panel_accounts"),
+ pickImportFile:()=>tauriInvoke<ImportPreview|null>("pick_import_file"),
  pickQrImage:()=>tauriInvoke<ImportPreview|null>("pick_qr_image"),
  testNotification:()=>tauriInvoke<void>("test_notification"),
 };

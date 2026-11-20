@@ -4,9 +4,13 @@
 
 - Limit Vitest to TypeScript test/spec files under `src/`, keeping Node.js test scripts out of the frontend runner.
 - Run the release-context security tests independently with `node --test` in CI.
-- Implement the trusted-invocation allowlist for this repository's version-tag pushes and matching release workflow reference. [Patch details](v0.2.1.md)
+- Implement the trusted-invocation allowlist for this repository's version-tag pushes and matching release workflow reference.
+- Add OS-held vault writer exclusion, UTC-correction handling, authenticated corrupt-account recovery, cross-window privacy and bounded migration/backup lifecycle fixes.
+- Run NSIS and MSI lifecycle checks on separate fresh runners. [Patch details and qualification boundaries](v0.2.1.md)
 
 ## v0.2.0
+
+At the 2026-11-21 remote inspection, this published release entry had **zero assets**. The feature description below is historical scope, not proof of available verified downloads or a working public update channel. Do not treat an empty release as an installable update.
 
 - Check for signed Windows updates in Settings. Review the release notes, date and download size before installing.
 - Release downloads include SHA-256 files and separate signed packages for EXE and MSI installations.

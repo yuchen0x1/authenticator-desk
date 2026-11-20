@@ -24,7 +24,7 @@ Add an account or import a QR image, then open favorite codes with Ctrl+Shift+Q.
 
 ## Updating
 
-Users on v0.1.0 install the next release manually using the same installer family. Signed builds provide **Settings → Application updates** with release notes, download progress and deliberate installation. See the [update and recovery guide](docs/updating.md).
+Users on v0.1.0 install the next release manually using the same installer family. Signed builds provide **Settings → Application updates** with release notes, download progress and deliberate installation. Back up first and fully exit all running versions before upgrading: the new per-vault writer guard cannot coordinate with older clients that lack it. See the [update and recovery guide](docs/updating.md).
 
 ## Import and migration
 
@@ -55,8 +55,8 @@ Users on v0.1.0 install the next release manually using the same installer famil
 
 Prerequisites:
 
-- Node.js 24 or newer and pnpm 11
-- Rust stable with the MSVC toolchain
+- Node.js 26.13.1 and pnpm 11.20.0 (see `.node-version` and `packageManager`)
+- Rust 1.99.1 with the MSVC toolchain (see `rust-toolchain.toml`)
 - Visual Studio 2022 C++ Build Tools
 - Microsoft Edge WebView2 Runtime
 
@@ -91,7 +91,16 @@ The default Rust feature set tests core code without linking the desktop runtime
 
 Production data lives in Tauri's application data directory. The backend
 accepts an `AUTHDESK_DATA_DIR` override so isolated test vaults can run
-elsewhere; the frontend never chooses arbitrary storage paths.
+elsewhere; the frontend never chooses arbitrary storage paths. A successful
+create/unlock reserves that canonical vault path until the owning service exits
+(or is reconfigured while locked), including while the UI is locked. Close the
+other instance before opening the same vault elsewhere; do not delete its `.lock`
+sidecar to bypass ownership.
+
+If authenticated account loading fails after unlock, the app keeps codes disabled
+and offers retry plus Backup/Security recovery only. A confirmed Replace can
+restore an authenticated backup without decrypting damaged outgoing account rows;
+Merge still authenticates the existing data and fails closed on corruption.
 
 ## License
 
