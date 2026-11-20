@@ -10,6 +10,8 @@ import { AccountDialog } from "./AccountDialog";
 vi.mock("../../lib/tauri", () => ({ accountCommands: { details: vi.fn() } }));
 
 const messages = getMessages("en");
+// Public RFC 4648 Base32 test vector for "foobar", not an account credential.
+const replacementSecret = "MZXW6YTBOI";
 const t = {
   ...messages.fields, ...messages.actions, ...messages.status,
   required: messages.status.invalid, secretPrivacy: messages.pages.accountsHint,
@@ -168,10 +170,10 @@ describe("AccountDialog", () => {
     expect(handlers.onSave).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("alert")).toHaveTextContent(ui.secretReplacementRequired);
 
-    fireEvent.change(secret, { target: { value: " GEZDGNBVGY3TQOJQ " } });
+    fireEvent.change(secret, { target: { value: ` ${replacementSecret} ` } });
     await act(async () => fireEvent.submit(form));
     expect(handlers.onSave).toHaveBeenCalledTimes(2);
-    expect(handlers.onSave).toHaveBeenLastCalledWith(expect.objectContaining({ secret: "GEZDGNBVGY3TQOJQ", tags: ["fixed"] }));
+    expect(handlers.onSave).toHaveBeenLastCalledWith(expect.objectContaining({ secret: replacementSecret, tags: ["fixed"] }));
     expect(secret).toHaveValue("");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
@@ -209,7 +211,7 @@ describe("AccountDialog", () => {
     expect(handlers.onSave).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("alert")).toHaveTextContent(ui.secretReplacementRequired);
 
-    fireEvent.change(secret, { target: { value: "GEZDGNBVGY3TQOJQ" } });
+    fireEvent.change(secret, { target: { value: replacementSecret } });
     const cancelReplacement = screen.getByRole("button", { name: ui.cancelSecretReplacement });
     cancelReplacement.focus();
     fireEvent.click(cancelReplacement);
@@ -234,7 +236,7 @@ describe("AccountDialog", () => {
     const secret = screen.getByLabelText<HTMLInputElement>(t.secret, { exact: false, selector: "input" });
     fireEvent.change(secret, { target: { value: "JBSWY3DPEHPK3PXP" } });
     await act(async () => fireEvent.submit(secret.form!));
-    fireEvent.change(secret, { target: { value: "GEZDGNBVGY3TQOJQ" } });
+    fireEvent.change(secret, { target: { value: replacementSecret } });
     const dialog = screen.getByRole("dialog");
     if (method === "button") fireEvent.click(screen.getAllByRole("button", { name: t.cancel })[0]);
     else if (method === "escape") fireEvent.keyDown(dialog, { key: "Escape" });

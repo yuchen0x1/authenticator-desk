@@ -1,5 +1,13 @@
 # Test report
 
+## 2026-11-21 — hosted Security failure and public-fixture correction
+
+The first new-source push reached `main` at `7fbb53785317723c848371601afdcf3145c6f89e`. [Security run 44833817210](https://github.com/yuchen0x1/authenticator-desk/actions/runs/44833817210) failed: Gitleaks 8.24.3 flagged one public test-vector literal in the new `AccountDialog.test.tsx` assertion (`generic-api-key`). This is a real failed gate, not evidence of a leaked user credential. It was not ignored or rerun unchanged. The test now uses the public RFC 4648 Base32 `foobar` vector through a named fixture; production code and scan rules are unchanged. The dialog suite passed **17/17**, TypeScript and diff checks passed, and same-version Gitleaks scanning of that corrected file found no leaks.
+
+A portable official Gitleaks 8.24.3 Windows archive was downloaded into a new isolated directory and verified against the release checksum (`3f1a35578631dbfe633cc5b49e6c906e55ff14a4bfd7336a10fb27fe33b6dcd2`); it was not installed globally. A broader scan of the 268 tracked-file snapshot found **seven existing public-vector matches in six files**, all unchanged from baseline `60dae05`: `src/lib/schemas.test.ts`, the Aegis/andOTP/2FAS plain fixtures, and Rust `qr.rs`/`accounts.rs`. That broader scan exited 1; it is not reported as clean. Original format fixtures were retained, and no allowlist, history rewrite or scan-rule reduction was added. A clean incremental gate cannot establish a clean historical/full-tree scan.
+
+GitHub's open Dependabot alert 3 is `glib` 0.18.5, `GHSA-wrw7-89jp-8q8g` / `RUSTSEC-2024-0429`, not a newly introduced dependency. `cargo tree --locked --target x86_64-pc-windows-msvc --features signed-updater -i glib` printed no reverse dependency for that target. The alert remains open; this target observation does not fix the dependency or establish Linux desktop safety. New-source hosted checks after the fixture correction still require separate observation. No v0.3.0 tag or release is established by this entry.
+
 ## 2026-11-21 — 0.3.0 final local regression and explicit-target packaging
 
 This append-only entry records this round's local results. It does not establish remote CI for the exact pending source, a signed release, a Git tag, publication, complete native GUI acceptance, or an old-version live upgrade. No baseline-SHA remote CI result is used to qualify the newer source. The app source version check reported 0.3.0. Local Windows build and regression stdout logs both exited 0.
