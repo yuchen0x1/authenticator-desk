@@ -63,6 +63,9 @@ jobs:
       - name: Frontend tests
         run: pnpm exec vitest run
 
+      - name: Node release trust tests
+        run: node --test scripts/release-context.test.mjs
+
       - name: Rust tests
         run: cargo +stable test --locked --manifest-path src-tauri/Cargo.toml
 
