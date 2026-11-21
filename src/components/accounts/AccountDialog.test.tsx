@@ -43,6 +43,31 @@ beforeEach(() => {
 });
 
 describe("AccountDialog", () => {
+  it("edits the authenticated details snapshot instead of stale list metadata", async () => {
+    const latest: AccountView = { ...account, issuer:"Current service", account_name:"current-user", kind:"hotp", hotp_counter:"9007199254740993", algorithm:"SHA256", digits:8, period_secs:60, t0:"123", tags:["current"], favorite:true };
+    vi.mocked(accountCommands.details).mockResolvedValueOnce({account:latest, notes:"Current notes"});
+    const handlers = props();
+    render(<AccountDialog {...handlers} account={{...account, kind:"hotp", hotp_counter:"0"}} />);
+    await waitFor(() => expect(screen.getByRole("button", {name:t.save})).toBeEnabled());
+    expect(screen.getByLabelText(t.counter)).toHaveValue(latest.hotp_counter);
+    expect(screen.getByLabelText(t.issuer)).toHaveValue(latest.issuer);
+    fireEvent.change(screen.getByLabelText(t.notes), {target:{value:"Updated notes only"}});
+    await act(async () => fireEvent.submit(screen.getByRole("dialog").querySelector("form")!));
+    expect(handlers.onSave).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({issuer:latest.issuer, account_name:latest.account_name, kind:"hotp", hotp_counter:latest.hotp_counter, algorithm:"SHA256", digits:8, period_secs:60, t0:"123", tags:["current"], favorite:true, notes:"Updated notes only", secret:null}));
+  });
+
+  it("rejects details for a different account and allows retry without enabling a stale edit", async () => {
+    vi.mocked(accountCommands.details).mockResolvedValueOnce({account:{...account,id:"another-account"},notes:"Unrelated notes"});
+    const handlers = props();
+    render(<AccountDialog {...handlers} account={account} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(t.detailsLoadError);
+    expect(screen.getByRole("button", {name:t.save})).toBeDisabled();
+    expect(screen.getByLabelText(t.notes)).not.toHaveValue("Unrelated notes");
+    fireEvent.click(screen.getByRole("button", {name:t.retry}));
+    await waitFor(() => expect(screen.getByRole("button", {name:t.save})).toBeEnabled());
+    expect(screen.getByLabelText(t.notes)).toHaveValue("Existing private notes");
+  });
+
   it("uses flat loading/error/retry strings and keeps saving blocked until a single-flight details retry succeeds", async () => {
     const first = deferred<AccountDetails>(), retry = deferred<AccountDetails>();
     vi.mocked(accountCommands.details).mockReturnValueOnce(first.promise).mockReturnValueOnce(retry.promise);
@@ -269,6 +294,18 @@ describe("AccountDialog", () => {
     await act(async () => fireEvent.submit(form));
     expect(handlers.onSave).toHaveBeenCalledTimes(2);
     expect(handlers.onSave).toHaveBeenLastCalledWith(expect.objectContaining({ secret: null }));
+  });
+
+  it("allows editing an imported account with an empty optional issuer", async () => {
+    const imported = {...account, issuer:""};
+    vi.mocked(accountCommands.details).mockResolvedValueOnce({account:imported, notes:"Existing notes"});
+    const handlers = props();
+    render(<AccountDialog {...handlers} account={imported} />);
+    await waitFor(() => expect(screen.getByLabelText(t.notes)).toBeEnabled());
+    expect(screen.getByLabelText(t.issuer)).not.toBeRequired();
+    fireEvent.change(screen.getByLabelText(t.notes), {target:{value:"Edited without inventing a service"}});
+    await act(async () => fireEvent.submit(screen.getByRole("dialog").querySelector("form")!));
+    expect(handlers.onSave).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({issuer:"", account_name:account.account_name, notes:"Edited without inventing a service", secret:null}));
   });
 
   it("accepts the backend-compatible maximum TOTP period", async () => {

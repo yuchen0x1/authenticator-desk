@@ -32,7 +32,7 @@ export function AccountCard({ account, code, selected, masked, copyAvailable = f
     return () => window.clearTimeout(timer);
   }, [account.kind, masked]);
   const currentUnix = Math.floor(Math.max(now, Date.now()) / 1000);
-  const futureT0 = isFutureTotp(account, currentUnix);
+  const futureT0 = isFutureTotp(account, currentUnix - (code?.clock_offset_secs ?? 0));
   const remaining = code ? Math.max(0, code.remaining_secs - Math.max(0, currentUnix - code.clock_offset_secs - code.generated_at)) : 0;
   const visibleCode = !masked && !futureT0 && !advancing && code && (account.kind === "hotp" || remaining > 0) ? code : undefined;
   // Every repeated action carries both service and account identity.
@@ -60,7 +60,7 @@ export function AccountCard({ account, code, selected, masked, copyAvailable = f
         ? !futureT0 && <CodeRing progress={visibleCode ? remaining / account.period_secs : 0} remaining={visibleCode ? remaining : 0} />
         : <button className="icon-button" title={`${t.advanceHotp}: ${name}`} aria-label={`${t.advanceHotp}: ${name}`} disabled={masked || advancing} aria-busy={advancing} onClick={() => { if (!masked && !advancing) onAdvance(account); }}>＋</button>}
       <button className="icon-button" aria-label={`${account.favorite ? t.unfavorite : t.favorite}: ${name}`} title={account.favorite ? t.unfavorite : t.favorite} disabled={favoriting} aria-busy={favoriting} onClick={() => onFavorite(account)}>{account.favorite ? "★" : "☆"}</button>
-      <button className="icon-button" aria-label={`${t.edit}: ${name}`} title={t.edit} onClick={() => onEdit(account)}>✎</button>
+      <button className="icon-button" aria-label={`${t.edit}: ${name}`} title={t.edit} disabled={advancing} onClick={() => { if (!advancing) onEdit(account); }}>✎</button>
       <button className="icon-button" aria-label={`${t.copy}: ${name}`} title={t.copy} disabled={!copyAvailable || !visibleCode} onClick={copy}>⧉</button>
     </div>
   </article>;

@@ -113,6 +113,36 @@ fn input(issuer: &str, account: &str, secret: &str) -> AccountInput {
 }
 
 #[test]
+fn aegis_preserves_colons_in_native_account_names_through_preview_and_commit() {
+    let (_path, _vault, accounts, imports) = harness();
+    // Aegis has independent issuer/name fields, unlike an otpauth URI label.
+    // Public RFC 4648 Base32 vector for "foobar", not an account credential.
+    let entries: Vec<_> = [
+        ("Acme", "alice:prod"),
+        ("Acme", "Acme:alice:admin"),
+        ("", "alice:without-issuer"),
+    ]
+    .iter()
+    .map(|(issuer, name)| serde_json::json!({
+        "type":"totp", "issuer":issuer, "name":name,
+        "info":{"secret":"MZXW6YTBOI", "algo":"SHA1", "digits":6, "period":30}
+    }))
+    .collect();
+    let bytes = serde_json::to_vec(&serde_json::json!({
+        "version":1, "header":{}, "db":{"version":3,"entries":entries}
+    })).unwrap();
+    let parsed = AegisAdapter.preview(&bytes).unwrap();
+    let names: Vec<_> = parsed.items.iter().map(|item| item.input.as_ref().unwrap().account_name.as_str()).collect();
+    assert_eq!(names, ["alice:prod", "Acme:alice:admin", "alice:without-issuer"]);
+    let preview = imports.preview_file(bytes).unwrap();
+    assert_eq!(imports.commit_import(&preview.preview_id, &[0, 1, 2]).unwrap(), 3);
+    let stored = accounts.list_accounts(AccountQuery::default()).unwrap();
+    for (issuer, name) in [("Acme", "alice:prod"), ("Acme", "Acme:alice:admin"), ("", "alice:without-issuer")] {
+        assert!(stored.iter().any(|account| account.issuer == issuer && account.account_name == name));
+    }
+}
+
+#[test]
 fn google_migration_adapter_maps_batch_parameters() {
     let adapter = GoogleMigrationAdapter;
     let preview =

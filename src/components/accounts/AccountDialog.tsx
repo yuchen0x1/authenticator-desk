@@ -54,6 +54,21 @@ export function AccountDialog({ account, categories, defaults, t, onClose, onSav
         try {
           const details = await accountCommands.details(account.id);
           if (active) {
+            if (details.account.id !== account.id) throw new Error("Account details mismatch");
+            // The list may predate a HOTP advance or another native-window edit.
+            // Initialize once from the authenticated snapshot, never from later prop refreshes.
+            const latest = details.account;
+            setIssuer(latest.issuer);
+            setName(latest.account_name);
+            setAlgorithm(latest.algorithm);
+            setDigits(latest.digits);
+            setKind(latest.kind);
+            setPeriod(latest.period_secs);
+            setT0(latest.t0);
+            setCounter(latest.hotp_counter);
+            setCategory(latest.category_id ?? "");
+            setTags(latest.tags.join(", "));
+            setFavorite(latest.favorite);
             setNotes(details.notes);
             setDetailsReady(true);
           }
@@ -117,7 +132,7 @@ export function AccountDialog({ account, categories, defaults, t, onClose, onSav
       secretInputRef.current?.focus();
       return;
     }
-    if (!issuer.trim() || !name.trim() || (!account && !secretRef.current.trim()) || (kind === "totp" && (!Number.isInteger(period) || period < 1 || period > 86400))) {
+    if (!name.trim() || (!account && !secretRef.current.trim()) || (kind === "totp" && (!Number.isInteger(period) || period < 1 || period > 86400))) {
       setError(t.required);
       return;
     }
@@ -152,7 +167,7 @@ export function AccountDialog({ account, categories, defaults, t, onClose, onSav
         {detailsLoading && <p role="status" className="loading-state">{t.loading}</p>}
         {detailsError && <div className="inline-error" role="alert"><p>{t.detailsLoadError}</p><button type="button" className="button button-subtle" onClick={() => retryDetails.current()}>{t.retry}</button></div>}
         <fieldset className="form-grid mt-5 min-w-0 border-0 p-0" disabled={saving || !detailsReady}>
-          <label>{t.issuer}<input autoFocus value={issuer} onChange={(event) => setIssuer(event.target.value)} maxLength={128} required /></label>
+          <label>{t.issuer}<input autoFocus value={issuer} onChange={(event) => setIssuer(event.target.value)} maxLength={128} /></label>
           <label>{t.accountName}<input value={name} onChange={(event) => setName(event.target.value)} maxLength={256} required /></label>
           <div className="field-wide">
             <label>{t.secret}<input ref={secretInputRef} type="password" autoComplete="new-password" value={secret} placeholder={account && !replacementPending ? t.secretKeep : ""} aria-describedby={account ? "secret-keep-hint" : undefined} onChange={(event) => { secretRef.current = event.target.value; setSecret(event.target.value); }} />{account && <span id="secret-keep-hint">{replacementPending ? ui.secretReplacementRequired : t.secretKeep}</span>}</label>

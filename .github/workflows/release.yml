@@ -77,7 +77,7 @@ jobs:
           if [[ -n "$NOTES_PATH" ]]; then notes=(--notes-file "$NOTES_PATH"); fi
           status=(--latest)
           if [[ "$GITHUB_REF_NAME" == *-rc.* ]]; then status=(--prerelease --latest=false); fi
-          gh release create "$GITHUB_REF_NAME" --verify-tag --draft --title "$GITHUB_REF_NAME" "${notes[@]}" "${status[@]}" release-assets/*
+          gh release create "$GITHUB_REF_NAME" --verify-tag --target "$GITHUB_SHA" --draft --title "$GITHUB_REF_NAME" "${notes[@]}" "${status[@]}" release-assets/*
           gh release download "$GITHUB_REF_NAME" --dir verified-download
           node scripts/release.mjs verify verified-download "$GITHUB_REF_NAME" signed
           gh release edit "$GITHUB_REF_NAME" --draft=false "${status[@]}"

@@ -34,6 +34,7 @@ export default function App() {
   const [error,setError] = useState("");
   const [dialog,setDialog] = useState<AccountView|"new"|null>(null);
   const generation=useRef(0);
+  const dialogGeneration=useRef(0);
   const codeGeneration=useRef(0);
   const hydrationRequest=useRef(0);
   const settingsRequest=useRef(0);
@@ -66,6 +67,7 @@ export default function App() {
     ready.current=false;
     blockCodes();
     accountsRef.current=[];
+    dialogGeneration.current++;
     setAccounts([]); setCategories([]); setDialog(null); setToast("");
     if(snapshotRef.current){
       snapshotRef.current={...snapshotRef.current,locked:true};
@@ -115,6 +117,7 @@ export default function App() {
       // Only an unlocked snapshot plus authenticated settings may expose repair
       // tools. Failed metadata is never an empty, ready vault or an OTP source.
       accountsRef.current=[];
+      dialogGeneration.current++;
       setAccounts([]); setCategories([]); setDialog(null);
       setWorkspace(receivedSettings?"recovery":!receivedSnapshot&&(reason as {code?:string})?.code==="backend_unavailable"?"unavailable":"error");
       setError(errorMessage(localeRef.current,reason));
@@ -146,7 +149,7 @@ export default function App() {
     }).catch((reason)=>{
       if(!active.current||token!==generation.current||request!==settingsRequest.current)return;
       fail(reason);
-      if((reason as {code?:string})?.code!=="vault_locked"){ready.current=false;setDialog(null);setWorkspace("error");}
+      if((reason as {code?:string})?.code!=="vault_locked"){ready.current=false;dialogGeneration.current++;setDialog(null);setWorkspace("error");}
     });
   },[applySettings,blockCodes,fail,hydrate]);
   const notify=useCallback((message:string)=>setToast(message),[]);
@@ -217,9 +220,24 @@ export default function App() {
     await hydrate();
   }
   async function lock(){clearSensitive();try{await vaultCommands.lock();}catch(reason){fail(reason);}}
-  function showDialog(item:AccountView|"new"){restoreFocus.current=document.activeElement as HTMLElement;setDialog(item);}
-  function closeDialog(){setDialog(null);restoreFocus.current?.focus();}
-  async function saveAccount(input:AccountInput){if(dialog==="new")await accountCommands.create(input);else if(dialog)await accountCommands.update(dialog.id,input);closeDialog();notify(t.status.saved);try{await refresh();}catch(reason){fail(reason);}}
+  function showDialog(item:AccountView|"new"){dialogGeneration.current++;restoreFocus.current=document.activeElement as HTMLElement;setDialog(item);}
+  function closeDialog(){dialogGeneration.current++;setDialog(null);restoreFocus.current?.focus();}
+  async function saveAccount(input:AccountInput){
+    const target=dialog;
+    const token=generation.current;
+    const dialogToken=dialogGeneration.current;
+    const currentSession=()=>active.current&&ready.current&&token===generation.current&&!snapshotRef.current?.locked;
+    const currentDialog=()=>currentSession()&&dialogToken===dialogGeneration.current;
+    if(!target||!currentDialog())return;
+    try{
+      if(target==="new")await accountCommands.create(input);
+      else await accountCommands.update(target.id,input);
+    }catch(reason){if(currentDialog())throw reason;return;}
+    // A completed native mutation must never close a newer session's draft.
+    if(!currentDialog())return;
+    closeDialog();notify(getMessages(localeRef.current).status.saved);
+    try{await refresh();}catch(reason){if(currentSession())fail(reason);}
+  }
   async function saveSettings(value:AppSettings){
     const token=generation.current;
     const request=++settingsRequest.current;
@@ -243,7 +261,7 @@ export default function App() {
   return <div data-theme={settings.theme} data-motion={settings.animations?"on":"off"} data-compact={settings.compact?"on":"off"} className="app-root"><div inert={dialog?true:undefined}><AppShell locale={locale} page={page} locked={snapshot?.locked??true} onNavigate={navigate} onLock={()=>void lock()}>
     {error&&workspace!=="unavailable"&&<div role="alert" className="error-banner"><span>{error}</span><button onClick={()=>setError("")} aria-label={t.actions.dismissError} title={t.actions.dismissError}>×</button></div>}
     {workspace==="unavailable"?<div className="vault-gate"><div className="vault-emblem">◇</div><h2>{t.shell.unavailableTitle}</h2><p>{t.shell.unavailable}</p></div>:snapshot?.locked?<VaultGate locale={locale} exists={snapshot.vault_exists} onSubmit={lockedForm} onError={fail}/>:workspace==="loading"?<div className="loading-state" role="status">{t.shell.checking}</div>:workspace==="error"||workspace==="recovery"?<><div className={workspace==="recovery"&&recoveryPage?"workspace-feedback":"vault-gate"}><div className="vault-emblem">◇</div><h2>{t.status.error}</h2><button className="button button-primary" onClick={()=>void hydrate()}>{t.desktop.retry}</button></div>{workspace==="recovery"&&(page==="backup"?<BackupPage {...props}/>:page==="security"?<SecurityPage {...props}/>:null)}</>:<>{page==="dashboard"?<DashboardPage {...props}/>:page==="codes"||page==="accounts"||page==="favorites"?<AccountsPage {...props} mode={page}/>:page==="categories"?<CategoriesPage {...props}/>:page==="import"?<ImportPage {...props}/>:page==="backup"?<BackupPage {...props}/>:page==="security"?<SecurityPage {...props}/>:page==="activity"?<ActivityPage {...props}/>:<SettingsPage {...props}/>}</>}
-  </AppShell></div>{toast&&<div role="status" className="toast">✓ {toast}</div>}{dialog&&!snapshot?.locked&&workspace==="ready"&&<AccountDialog account={dialog==="new"?undefined:dialog} categories={categories} defaults={{algorithm:settings.default_algorithm,digits:settings.default_digits,period:settings.default_period_secs}} t={{...t.fields,...t.actions,...t.status,loading:t.pages.loading,retry:t.desktop.retry,required:t.status.invalid,uncategorized:t.fields.uncategorized,secretPrivacy:t.pages.accountsHint,secretKeep:t.fields.secretKeep}} onClose={closeDialog} onSave={saveAccount}/>}</div>;
+  </AppShell></div>{toast&&<div role="status" className="toast">✓ {toast}</div>}{dialog&&!snapshot?.locked&&workspace==="ready"&&<AccountDialog key={dialogGeneration.current} account={dialog==="new"?undefined:dialog} categories={categories} defaults={{algorithm:settings.default_algorithm,digits:settings.default_digits,period:settings.default_period_secs}} t={{...t.fields,...t.actions,...t.status,loading:t.pages.loading,retry:t.desktop.retry,required:t.status.invalid,uncategorized:t.fields.uncategorized,secretPrivacy:t.pages.accountsHint,secretKeep:t.fields.secretKeep}} onClose={closeDialog} onSave={saveAccount}/>}</div>;
 }
 
 function VaultGate({locale,exists,onSubmit,onError}:{locale:Locale;exists:boolean;onSubmit:(password:string,create:boolean)=>Promise<void>;onError:(reason:unknown)=>void}){const t=getMessages(locale);const [password,setPassword]=useState("");const [confirm,setConfirm]=useState("");const [pending,setPending]=useState(false);const [error,setError]=useState("");async function submit(event:FormEvent){event.preventDefault();if(!exists&&password.length<12){setError(t.status.weakPassword);return;}if(!exists&&password!==confirm){setError(t.status.mismatch);return;}const value=password;setPassword("");setConfirm("");setPending(true);setError("");try{await onSubmit(value,!exists);}catch(reason){onError(reason);}finally{setPending(false);}}return <div className="vault-gate"><div className="vault-emblem" aria-hidden="true">◇</div><h2>{exists?t.shell.lockedTitle:t.shell.createTitle}</h2><p>{exists?t.shell.lockedBody:t.shell.createBody}</p><form onSubmit={submit} className="mt-7 grid w-full max-w-sm gap-4"><label>{t.shell.password}<input autoFocus type="password" autoComplete={exists?"current-password":"new-password"} value={password} onChange={(event)=>setPassword(event.target.value)} required minLength={exists?undefined:12}/></label>{!exists&&<label>{t.shell.confirmPassword}<input type="password" autoComplete="new-password" value={confirm} onChange={(event)=>setConfirm(event.target.value)} required/></label>}{error&&<p role="alert" className="field-error">{error}</p>}<button className="button button-primary" disabled={pending} type="submit">{pending?t.pages.loading:exists?t.shell.unlock:t.shell.createVault}</button></form></div>;}

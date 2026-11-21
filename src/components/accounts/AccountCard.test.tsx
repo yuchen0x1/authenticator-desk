@@ -115,6 +115,20 @@ describe("account code rendering", () => {
     expect(screen.queryByText("123 456")).not.toBeInTheDocument();
   });
 
+  it.each([-3600, 3600])("uses the same compensated time for T0 and code expiry with offset %i", (offset) => {
+    const props = cardProps();
+    const wallNow = Math.floor(Date.now() / 1000);
+    const effectiveNow = wallNow - offset;
+    const shifted = {...account, t0:String(effectiveNow - 60)};
+    render(<AccountCard {...props} account={shifted} code={{...props.code, generated_at:effectiveNow, clock_offset_secs:offset}} />);
+    expect(screen.getByText("123 456")).toBeVisible();
+    expect(screen.queryByText(labels.futureT0)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", {name:actionName(labels.copy)}));
+    expect(props.onCopy).toHaveBeenCalledExactlyOnceWith(shifted);
+    act(() => vi.advanceTimersByTime(12000));
+    expect(screen.getByRole("button", {name:actionName(labels.copy)})).toBeDisabled();
+  });
+
   it("does not treat HOTP remaining_secs=0 as expired, but blocks advancement while hidden", () => {
     const props = { ...cardProps(), account: { ...account, kind: "hotp" as const }, code: { ...code, remaining_secs: 0 } };
     const { rerender } = render(<AccountCard {...props} />);
@@ -143,6 +157,10 @@ describe("account code rendering", () => {
     expect(advance).toBeDisabled();
     expect(advance).toHaveAttribute("aria-busy", "true");
     expect(copy).toBeDisabled();
+    const edit = screen.getByRole("button", {name:actionName(labels.edit)});
+    expect(edit).toBeDisabled();
+    fireEvent.click(edit);
+    expect(props.onEdit).not.toHaveBeenCalled();
     fireEvent.click(advance);
     fireEvent.click(copy);
     expect(props.onAdvance).not.toHaveBeenCalled();

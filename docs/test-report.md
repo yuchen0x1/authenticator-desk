@@ -1,5 +1,84 @@
 # Test report
 
+## 2026-11-21 — 0.3.1 edit/migration integrity qualification
+
+This entry records the current round, starting at `6d13f6d` with source version 0.3.0 and preparing 0.3.1. It supersedes neither historical results nor their limitations. At the time of recording, the code has not yet been pushed or tagged; remote CI and publication must be observed separately for the delivered SHA. The five-project design/format investigation and prioritized backlog are in [this review](research/2026-11-21-edit-integrity-review.md).
+
+### Final current-source local checks
+
+| Check | Observed result and boundary |
+|---|---|
+| Frontend | **248 passed / 26 files**, zero failures; includes old-save success/failure across lock/unlock, same-session workspace recovery, authenticated-details editing, wrong-account rejection, optional issuer, HOTP advance/Edit exclusion and positive/negative CodeView offset contracts. |
+| Node release/security scripts | **40 passed**, zero skipped/failures. New exact-tag-SHA policy test first failed, then passed after the minimal workflow fix. |
+| Rust default suite | **64 library + 64 integration = 128 passed**, zero failures. One subprocess helper is ignored in ordinary discovery and invoked by the passing parent lease test. Aegis integration target now has 24 tests. |
+| Desktop/OTP/scaffold features | **9 passed** with `--features desktop,signed-updater --test desktop --test otp_commands --test scaffold_contract`; some overlap default tests. |
+| Signed-updater boundaries | **4 passed / 1 ignored** with `--features signed-updater --lib update::signed::tests`. The ignored real-key staged-release verifier requires actual signed release assets; it was not replaced by a mock success. |
+| TypeScript / Vite | `pnpm build` passed; 148 modules; CSS 34.79 kB (gzip 8.24 kB), JS 453.28 kB (gzip 138.79 kB). These are sizes, not measured speed improvements. |
+| Version / staged hygiene | `node scripts/release.mjs version` verified 0.3.1 in all four version fields; staged `git diff --check` passed. Gitleaks 8.24.3 `git --pre-commit --staged --redact` found no leaks in this patch. This is not a clean historical/full-tree scan claim; the seven historical public-vector matches recorded below remain separate. |
+| Windows packaging | `RUSTUP_TOOLCHAIN=stable pnpm tauri build --target x86_64-pc-windows-msvc --bundles nsis,msi -- --locked` exited 0 and produced both installers. |
+| npm audit | Official-registry `pnpm audit --registry=https://registry.npmjs.org --json`, followed by the fail-closed report verifier: no advisories, no active exceptions, both exit 0. The configured mirror did not implement the audit endpoint, so its error was not treated as a clean report. Dependencies were not changed afterward. |
+| Rust dependency audit | Completed with **six allowed warnings**, not zero advisories: unmaintained chrono 0.4.45, proc-macro-error 1.0.4, zbus_names 4.3.5, zvariant/derive 5.15.1; glib 0.18.5 unsoundness. See advisory IDs in the historical section below. The Windows target excludes glib; Linux desktop is not qualified. |
+| Strict non-CI lint checks | Whole-repository `cargo fmt --check` **failed** on existing formatting. `cargo clippy --all-targets --features desktop,signed-updater -- -D warnings` **failed** with 14 library / 15 library-test diagnostics in unchanged accounts, backup, commands, import/base64, import/otpauth, OTP and security-audit source. No suppression, broad reformatting or gate reduction was applied. |
+
+The version-named Rust installation is partially broken (`missing manifest` / existing cargo component conflict). Local commands used installed `stable`, verified as the same pinned rustc 1.99.1 commit `58cf8f9c3`; the repository toolchain pin was not changed. The first packaging command failed because the user's existing process held the default release EXE open. That process was not stopped. Only the explicit-target retry succeeded.
+
+The integrated regression log is `call_6RBKt1v9wc9sIPh6iWAcQH1J-stdout.log`; packaging log is `call_XUWWV7W2tChfXdO6VlLkZaDI__rk16__dzoBwLga6afds_ip-stdout.log` in this task's local log directory. Failing runs are not counted as successful runs.
+
+### Real native UI acceptance — synthetic data only
+
+The explicit-target 0.3.1 EXE was launched with a new temporary `AUTHDESK_DATA_DIR` and independently identified process. The existing default-target app and its vault were not operated on. Using the real Windows accessibility tree and WebView2 UI, the following completed:
+
+1. Create a new synthetic vault with a test-only password.
+2. Add an account with empty issuer, account name `synthetic:public-vector`, and the public RFC 4648 `foobar` Base32 vector; edit only its notes without replacing the secret.
+3. Select a local synthetic plain Aegis file; preview/commit two rows named `alice:prod` and `public:hotp`. Both names remain intact in preview and the resulting account cards.
+4. Explicitly advance the HOTP account from counter 0 to 1, open Edit, observe counter `1`, change notes and save successfully.
+5. Lock: account names and codes disappear. Unlock: reopen HOTP Edit and observe counter `1` and the saved note together.
+6. Cancel editing and lock the synthetic vault at the end.
+
+Real screenshots were emitted for new-vault, codes/import result, locked state and persisted HOTP edit state. They were not fabricated or substituted with browser mocks. No real account secret was used; no copy-code action, notification, autostart registration, production backup or production restore was performed. Browser-only backend-unavailable behavior is not evidence of native functionality. Native UI acceptance does not replace deterministic delayed-response regressions, clean-runner installers or a genuine old-version signed update.
+
+### Local final artifacts — not official release assets
+
+Paths are below `src-tauri/target/x86_64-pc-windows-msvc/release/`. All three are Authenticode **NotSigned**, independently checked with Windows signature inspection. No updater private key was provided to this local build.
+
+| Artifact | Bytes | SHA-256 |
+|---|---:|---|
+| `authenticator-desk.exe` | 13,881,856 | `f09e4191c6f325a8273156e3bec9fe37d0ffb2648b251e0f4c4f43438883ab57` |
+| `bundle/nsis/AUTHENTICATOR DESK_0.3.1_x64-setup.exe` | 3,673,175 | `61b419d8a03ed41111ff9194a56aad23a8ce3567946df9c4450ccf4074adda71` |
+| `bundle/msi/AUTHENTICATOR DESK_0.3.1_x64_en-US.msi` | 5,214,208 | `722f5e5d3b3feb97f6824cfd1adcfc744b809ada88f5c0000291e594113b9dc3` |
+
+These hashes identify only the inspected local builds. No local installer was installed over the existing application; fresh-runner NSIS/MSI lifecycle, signing and download verification remain separate remote gates. The existing `release-assets/` directory contains older artifacts and was not reused or emptied.
+
+### Exposure audit — 1. Overview
+
+The read-only heuristic scanner rechecked final `dist/` (3 files, one JS artifact) and the final standalone EXE. Web: 100/A, no findings. Native: 76/C, two high labels and one informational record. These relative triage scores are not security certification, exploitability proof or a claim of resistance to reverse engineering.
+
+### Exposure audit — 2. Findings
+
+| ID | Scanner severity | Evidence | Reviewed meaning |
+|---|---|---|---|
+| PE-SIGN | High | PE `DataDirectory[SECURITY]` empty; Windows signature status NotSigned | Local publisher identity is unqualified. Minisign update signing is separate. |
+| LEAK-INTRANET | High | Embedded `http://localhost:1420` development-configuration string | Not evidence of a private-network service or a production listener. |
+| PE-INFO | Info | PE32+, machine 0x8664, DllCharacteristics 0xc160 | Native header metadata; no new hardening claim. |
+
+### Exposure audit — 3. Evidence and remediation
+
+Commands used `python -I .../exposure_scan.py dist --profile web --json` and the final EXE with `--profile native --json`. Authenticode was checked separately for the EXE and both installers. A real publisher certificate, pinned thumbprint, timestamp service and mandatory policy are needed before claiming publisher signing; no certificate was invented or secret read. The localhost finding is a false inference about network exposure, not a reason to move local vault data to a gateway. No obfuscation, anti-debugging or new concealment layer was added.
+
+### Exposure audit — 4. Client-side limits
+
+This is open-source offline authenticator software. Its algorithms are not secrets. Unlocked seed access by a compromised OS/debugger cannot be solved with client obfuscation; do not replace vault-at-rest protection with a promise of runtime secrecy. There is no server subscription gate to relocate. Release private keys remain in the protected build environment; only the verifier public key belongs in clients. A static scan does not prove those runtime boundaries.
+
+### Exposure audit — 5. Remediation order
+
+P0: keep real credentials, vaults and private signing keys out of the repository and artifacts. P1: pass exact-source hosted Security/CI, real-key asset verification and separate installer lifecycle gates before release promotion. P2: qualify publisher signing, clipboard history/cloud exclusions and platform-specific resilience independently.
+
+### Remote configuration repair and outstanding delivery gates
+
+The scheduled Maintenance job has no `release` environment, so the public verifier that existed only at environment scope was unavailable there. The same **non-secret** `AUTHDESK_UPDATER_PUBLIC_KEY` was set at repository-variable scope and read back; equality with the release-environment value was verified (SHA-256 fingerprint `93cad7603c5953f268d3dba13d14938dcfd2210ceef8de4f7b8844cb26f8618d`). Private keys, secrets, environment deployment restrictions and signature verification were not changed. This fixes variable visibility, not the previously observed empty v0.2.0 release assets.
+
+Commit/main push, exact-source hosted results, a new tag, release creation, seven downloaded signed assets, stable update metadata, and a genuine prior-version signed update must each be recorded separately. At this entry's recording point, no v0.3.1 tag or Release has been created. Do not infer publication from a candidate release-notes file.
+
 ## 2026-11-21 — hosted Security failure and public-fixture correction
 
 The first new-source push reached `main` at `7fbb53785317723c848371601afdcf3145c6f89e`. [Security run 44833817210](https://github.com/yuchen0x1/authenticator-desk/actions/runs/44833817210) failed: Gitleaks 8.24.3 flagged one public test-vector literal in the new `AccountDialog.test.tsx` assertion (`generic-api-key`). This is a real failed gate, not evidence of a leaked user credential. It was not ignored or rerun unchanged. The test now uses the public RFC 4648 Base32 `foobar` vector through a named fixture; production code and scan rules are unchanged. The dialog suite passed **17/17**, TypeScript and diff checks passed, and same-version Gitleaks scanning of that corrected file found no leaks.

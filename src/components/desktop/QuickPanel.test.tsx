@@ -69,6 +69,21 @@ describe("favorite quick panel lock and visibility lifecycle", () => {
     expect(await screen.findByText("654321")).toBeVisible();
   });
 
+  it.each([-3600, 3600])("keeps a backend-active TOTP usable across T0 with clock offset %i", async (offset) => {
+    state.locked = false;
+    state.settings.mockResolvedValue({locale:"en",hide_codes:false});
+    const effectiveNow = Math.floor(Date.now()/1000) - offset;
+    state.quickPanelAccounts.mockResolvedValue([{...account,t0:String(effectiveNow - 60)}]);
+    state.codes.mockResolvedValue([{...code("654321",effectiveNow),clock_offset_secs:offset}]);
+    render(<QuickPanel />);
+    expect(await screen.findByText("654321")).toBeVisible();
+    expect(screen.queryByText("Not active yet")).not.toBeInTheDocument();
+    const copy = screen.getByRole("button", {name:"Copy code: Example alice"});
+    expect(copy).toBeEnabled();
+    fireEvent.click(copy);
+    await waitFor(() => expect(state.copy).toHaveBeenCalledExactlyOnceWith(account.id,"654321"));
+  });
+
   it("uses the saved language and updates document language", async () => {
     state.locked=false;
     state.settings.mockResolvedValue({locale:"en",hide_codes:false});

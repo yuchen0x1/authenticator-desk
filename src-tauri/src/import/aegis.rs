@@ -76,14 +76,9 @@ fn map_entry(entry: &Value) -> MigrationItem {
         };
         input.hotp_counter = counter.unwrap_or(0).to_string();
     }
-    let label = name.as_deref().unwrap_or("");
-    let (label_issuer, account) = label
-        .split_once(':')
-        .map(|(issuer, rest)| (issuer.trim(), rest.trim()))
-        .unwrap_or(("", label.trim()));
-    let issuer = json_str(entry, "issuer").unwrap_or(label_issuer);
-    input.issuer = issuer.to_owned();
-    input.account_name = if account.is_empty() { label } else { account }.to_owned();
+    // Aegis stores issuer and name separately; ':' is account-name data.
+    input.issuer = json_str(entry, "issuer").unwrap_or_default().to_owned();
+    input.account_name = name.as_deref().unwrap_or_default().trim().to_owned();
     input.secret = Some(secret.to_owned());
     if decode_base32(secret).is_err() || input.validate(true).is_err() {
         return MigrationItem {

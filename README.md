@@ -35,6 +35,14 @@ Users on v0.1.0 install the next release manually using the same installer famil
 
 The SQLite schema and `.authdesk` format are unchanged. See the [six-project reliability review](docs/research/2026-11-21-reliability-review.md) and [verification evidence](docs/test-report.md).
 
+## Edit and migration integrity (0.3.1 candidate)
+
+- Late Add/Edit save results cannot close a newer draft after lock/unlock or workspace recovery.
+- Editing starts from authenticated account details, including the latest HOTP counter; background list refreshes do not overwrite the draft.
+- Empty optional platform names remain editable, and plain Aegis account names retain literal colons.
+
+This is prepared source, not a claim of a published 0.3.1 download. At the 2026-11-21 remote inspection, the latest stable entry was v0.2.0 with no assets. See [candidate notes](docs/releases/v0.3.1.md), [five-project review](docs/research/2026-11-21-edit-integrity-review.md) and [current verification evidence](docs/test-report.md). Only verified release assets establish installation/update availability.
+
 ## Import and migration
 
 - Textarea paste and file import both route through the same

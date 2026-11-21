@@ -145,8 +145,8 @@ export function QuickPanel() {
   const byId = new Map(codes.map((item) => [item.account_id, item]));
   function usableCode(account: AccountView) {
     const currentUnix = Math.max(now, Math.floor(Date.now() / 1000));
-    const futureT0 = isFutureTotp(account, currentUnix);
     const code = byId.get(account.id);
+    const futureT0 = isFutureTotp(account, currentUnix - (code?.clock_offset_secs ?? 0));
     const remaining = code ? Math.max(0, code.remaining_secs - Math.max(0, currentUnix - code.clock_offset_secs - code.generated_at)) : 0;
     return { code: !masked && !futureT0 && code && (account.kind === "hotp" || remaining > 0) ? code : undefined, remaining, futureT0 };
   }
