@@ -273,10 +273,15 @@ fn independent_services_cannot_corrupt_password_rotation() {
 
     drop(owner_accounts);
     drop(owner);
-    assert!(matches!(
-        contender.unlock_vault(SecretString::from("old-password")),
-        Err(AppError::AuthenticationFailed)
-    ));
+    let old_password_result = contender.unlock_vault(SecretString::from("old-password"));
+    assert!(
+        matches!(
+            old_password_result.as_ref(),
+            Err(AppError::AuthenticationFailed)
+        ),
+        "expected the rotated password to reject authentication, got error: {:?}",
+        old_password_result.as_ref().err()
+    );
     contender
         .unlock_vault(SecretString::from("new-password"))
         .unwrap();
