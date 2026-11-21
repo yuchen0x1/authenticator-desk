@@ -4,6 +4,9 @@ import { createReadStream } from "node:fs";
 import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { requireTrustedReleaseInvocation } from "./release-context.mjs";
+import { verifyReleaseSignatures } from "./verify-signatures.mjs";
 
 const releaseRoot = "https://github.com/yuchen0x1/authenticator-desk/releases/";
 const installerTargets = ["windows-x86_64-nsis", "windows-x86_64-msi"];
@@ -48,18 +51,59 @@ function tauri(...args) {
     { stdio: "inherit" });
 }
 
+function verifyPublisher(paths) {
+  const thumbprint = process.env.AUTHDESK_PUBLISHER_THUMBPRINT;
+  if (!thumbprint) {
+    if (process.env.AUTHDESK_REQUIRE_AUTHENTICODE === "1") throw new Error("Publisher certificate is required for this release policy");
+    console.warn("Authenticode not configured; updater signing is not Windows publisher signing");
+    return;
+  }
+  if (process.platform !== "win32" || !/^[a-fA-F0-9]{40}$/.test(thumbprint)) {
+    throw new Error("Publisher verification requires Windows and a pinned certificate thumbprint");
+  }
+  const env = { ...process.env };
+  delete env.TAURI_SIGNING_PRIVATE_KEY;
+  delete env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD;
+  for (const artifact of paths) {
+    execFileSync("powershell.exe", ["-NoProfile", "-File", resolve("scripts/verify-authenticode.ps1"), "-ExpectedThumbprint", thumbprint, "-Artifact", artifact], { stdio:"inherit", env });
+  }
+}
+
 async function buildSigned() {
+  requireTrustedReleaseInvocation();
+  const semver = await version(process.env.GITHUB_REF_NAME);
   const key = process.env.AUTHDESK_UPDATER_PUBLIC_KEY;
   if (!key || !process.env.TAURI_SIGNING_PRIVATE_KEY || !process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD) {
     throw new Error("Missing updater signing credentials");
   }
   const config = await json("src-tauri/tauri.release.conf.json");
   config.plugins.updater.pubkey = key;
+  const publisher = process.env.AUTHDESK_PUBLISHER_THUMBPRINT;
+  if (process.env.AUTHDESK_REQUIRE_AUTHENTICODE === "1" && !publisher) throw new Error("Publisher signing policy requires a certificate");
+  if (publisher) {
+    const timestamp = process.env.AUTHDESK_TIMESTAMP_URL;
+    if (!/^[a-fA-F0-9]{40}$/.test(publisher) || !timestamp || new URL(timestamp).protocol !== "https:") {
+      throw new Error("Publisher signing requires a certificate pin and HTTPS RFC3161 timestamp service");
+    }
+    config.bundle.windows = { ...config.bundle.windows, certificateThumbprint:publisher, digestAlgorithm:"sha256", timestampUrl:timestamp, tsp:true };
+  }
+  // Compile and package without exposing the updater private key to build hooks.
+  // Only the subsequent standalone signer sees the key; final package bytes are signed.
+  config.bundle.createUpdaterArtifacts = false;
+  const buildEnv = { ...process.env };
+  delete buildEnv.TAURI_SIGNING_PRIVATE_KEY;
+  delete buildEnv.TAURI_SIGNING_PRIVATE_KEY_PASSWORD;
   const temporaryDir = await mkdtemp(join(tmpdir(), "authdesk-build-"));
   const path = join(temporaryDir, "tauri-release.json");
   try {
     await writeFile(path, JSON.stringify(config));
-    tauri("build", "--ci", "--features", "signed-updater", "--config", path, "--", "--locked");
+    execFileSync(process.execPath, ["node_modules/@tauri-apps/cli/tauri.js", "build", "--ci", "--features", "signed-updater", "--config", path, "--", "--locked"],
+      { stdio: "inherit", env: buildEnv });
+    for (const [directory, extension] of [["nsis", ".exe"], ["msi", ".msi"]]) {
+      const artifact = await oneFile("src-tauri/target/release/bundle/" + directory, extension);
+      verifyPublisher([artifact]);
+      tauri("signer", "sign", "--app-version", semver, artifact);
+    }
   } finally {
     await rm(path, { force: true });
     await rmdir(temporaryDir);
@@ -67,11 +111,13 @@ async function buildSigned() {
 }
 
 async function stage(signed) {
+  if (signed) requireTrustedReleaseInvocation();
   const semver = await version();
   const root = "src-tauri/target/release/bundle/";
   const sources = [await oneFile(root + "nsis", ".exe"), await oneFile(root + "msi", ".msi")];
   const out = "release-assets";
   await mkdir(out, { recursive: true });
+  if ((await readdir(out)).length !== 0) throw new Error("Release staging directory must be empty; archive previous artifacts first");
   const artifacts = [];
   for (const [index, name] of names(semver).entries()) {
     const path = resolve(out, name);
@@ -145,7 +191,7 @@ async function verify(dir, tag, signed) {
   const sums = [];
   for (const { name, bytes, sha256 } of manifest.artifacts) {
     const path = resolve(dir, name);
-    if (basename(path) !== name || bytes <= 0 || (await stat(path)).size !== bytes ||
+    if (basename(path) !== name || bytes > 64 * 1024 * 1024 || !Number.isSafeInteger(bytes) || bytes <= 0 || (await stat(path)).size !== bytes ||
       !/^[a-f0-9]{64}$/.test(sha256) || await checksum(path) !== sha256) {
       throw new Error("Integrity check failed for " + name);
     }
@@ -155,9 +201,14 @@ async function verify(dir, tag, signed) {
     throw new Error("SHA256SUMS does not match release metadata");
   }
   if (signed) {
+    const publicKey = process.env.AUTHDESK_VERIFY_PUBLIC_KEY ?? process.env.AUTHDESK_UPDATER_PUBLIC_KEY;
+    if (!publicKey) throw new Error("A separately trusted updater public key is required");
+    if ((await stat(resolve(dir, "update.json"))).size > 96 * 1024) throw new Error("Update manifest exceeds the client limit");
     const envelope = await json(resolve(dir, "update.json"));
     const update = JSON.parse(envelope.payload);
     if (!/^[A-Za-z0-9+/]+=*$/.test(envelope.signature) || update.schema !== 1 ||
+        !Number.isSafeInteger(update.min_windows_build) || update.min_windows_build < 19045 ||
+        !Number.isFinite(Date.parse(update.pub_date)) || typeof update.notes !== "string" ||
         update.version !== manifest.version || !/^\d{4}-\d{2}-\d{2}$/.test(update.release_date) ||
         Buffer.byteLength(update.notes, "utf8") > 8192 ||
         Object.keys(update.platforms).sort().join(",") !== [...installerTargets].sort().join(",")) {
@@ -172,15 +223,38 @@ async function verify(dir, tag, signed) {
         throw new Error("Update metadata does not match " + file.name);
       }
     }
+    await verifyReleaseSignatures(dir, tag, publicKey);
   }
   console.log("Verified release assets for " + tag);
 }
 
-const [command, dir, tag, mode] = process.argv.slice(2);
-switch (command) {
-  case "version": await version(dir); break;
-  case "build-signed": await buildSigned(); break;
-  case "stage": await stage(dir === "signed"); break;
-  case "verify": await verify(dir, tag, mode === "signed"); break;
-  default: throw new Error("Usage: release.mjs version [tag] | build-signed | stage [signed] | verify <dir> <tag> [signed]");
+export function assertStablePromotion(tag, currentTags = "") {
+  const parse = (value) => {
+    const match = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(value);
+    if (!match) throw new Error("Stable promotion requires canonical version tags");
+    return match.slice(1).map(BigInt);
+  };
+  const candidate = parse(tag);
+  for (const current of currentTags.split(/\s+/).filter(Boolean)) {
+    const previous = parse(current);
+    let comparison = 0;
+    for (let index = 0; index < 3; index++) {
+      if (candidate[index] !== previous[index]) { comparison = candidate[index] > previous[index] ? 1 : -1; break; }
+    }
+    if (comparison <= 0) throw new Error("Stable channel may only advance beyond existing releases");
+  }
+}
+
+export { verify, version };
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const [command, dir, tag, mode] = process.argv.slice(2);
+  switch (command) {
+    case "context": requireTrustedReleaseInvocation(); break;
+    case "promotion": assertStablePromotion(requireTrustedReleaseInvocation(), dir); break;
+    case "version": await version(dir); break;
+    case "build-signed": await buildSigned(); break;
+    case "stage": await stage(dir === "signed"); break;
+    case "verify": await verify(dir, tag, mode === "signed"); break;
+    default: throw new Error("Usage: release.mjs context | promotion <current-stable-tags> | version [tag] | build-signed | stage [signed] | verify <dir> <tag> [signed]");
+  }
 }

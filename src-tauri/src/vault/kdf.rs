@@ -1,6 +1,6 @@
 use std::convert::TryInto;
 
-use argon2::{Algorithm, Argon2, Params, Version};
+use argon2::{Algorithm, Argon2, Block, Params, Version};
 use rand::{RngExt, rng};
 use zeroize::Zeroizing;
 
@@ -133,13 +133,30 @@ impl KdfHeader {
         self.validate()?;
         let params = Params::new(self.memory_kib, self.time_cost, self.lanes, Some(KEY_LEN))
             .map_err(|_| AppError::InvalidParameters)?;
+        let mut memory = allocate_work_memory(&params)?;
         let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
         let mut key = Zeroizing::new([0u8; KEY_LEN]);
         argon
-            .hash_password_into(password.as_bytes(), &self.salt, &mut key[..])
+            .hash_password_into_with_memory(
+                password.as_bytes(),
+                &self.salt,
+                &mut key[..],
+                &mut memory[..],
+            )
             .map_err(|_| AppError::Crypto)?;
         Ok(key)
     }
+}
+
+// Argon2 0.6's internally allocated work memory is deallocated without wiping.
+// Keep a fixed-size, owned buffer zeroizing on success, error, and unwinding.
+fn allocate_work_memory(params: &Params) -> AppResult<Zeroizing<Box<[Block]>>> {
+    let mut blocks = Vec::new();
+    blocks
+        .try_reserve_exact(params.block_count())
+        .map_err(|_| AppError::Crypto)?;
+    blocks.resize(params.block_count(), Block::new());
+    Ok(Zeroizing::new(blocks.into_boxed_slice()))
 }
 
 pub struct SecretString(Zeroizing<String>);
@@ -178,7 +195,11 @@ impl Clone for SecretString {
 
 #[cfg(test)]
 mod tests {
-    use super::{KdfHeader, SecretString};
+    use super::{
+        Algorithm, Argon2, DEFAULT_LANES, DEFAULT_MEMORY_KIB, DEFAULT_TIME_COST, KEY_LEN,
+        KdfHeader, MIN_MEMORY_KIB, Params, SecretString, Version, allocate_work_memory,
+    };
+    use zeroize::{Zeroize, ZeroizeOnDrop};
 
     #[test]
     fn header_round_trip_and_bounds() {
@@ -198,6 +219,76 @@ mod tests {
         header.memory_kib = 64 * 1024;
         header.time_cost = 16;
         assert!(header.validate().is_err());
+    }
+
+    #[test]
+    fn explicit_work_memory_preserves_existing_argon2id_derivation() {
+        let password = SecretString::from("work-memory-regression");
+        for (memory_kib, time_cost, lanes) in [
+            (MIN_MEMORY_KIB, 1, 1),
+            (MIN_MEMORY_KIB + 1, 2, 3),
+            (DEFAULT_MEMORY_KIB, DEFAULT_TIME_COST, DEFAULT_LANES),
+        ] {
+            let mut header = KdfHeader::new_default().unwrap();
+            header.salt = b"fixed-test-salt!0".to_vec();
+            header.memory_kib = memory_kib;
+            header.time_cost = time_cost;
+            header.lanes = lanes;
+            let params = Params::new(memory_kib, time_cost, lanes, Some(KEY_LEN)).unwrap();
+            let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+            let mut expected = [0u8; KEY_LEN];
+            argon
+                .hash_password_into(password.as_bytes(), &header.salt, &mut expected)
+                .unwrap();
+            assert_eq!(
+                header.derive_key(&password).unwrap().as_slice(),
+                expected,
+                "memory={memory_kib}, time={time_cost}, lanes={lanes}",
+            );
+        }
+    }
+
+    #[test]
+    fn work_memory_uses_argon2_block_count_and_zeroizes_in_place() {
+        fn assert_zeroizes_on_drop<T: ZeroizeOnDrop>(_: &T) {}
+
+        // The memory cost is rounded down to a multiple of lanes * four blocks.
+        let params = Params::new(MIN_MEMORY_KIB + 1, 1, 3, Some(KEY_LEN)).unwrap();
+        let mut memory = allocate_work_memory(&params).unwrap();
+        assert_zeroizes_on_drop(&memory);
+        assert_eq!(memory.len(), params.block_count());
+        assert_ne!(memory.len(), params.m_cost() as usize);
+        assert!(
+            memory
+                .iter()
+                .all(|block| block.as_ref().iter().all(|&word| word == 0))
+        );
+
+        let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+        let mut output = [0u8; KEY_LEN];
+        argon
+            .hash_password_into_with_memory(
+                b"test-password",
+                b"fixed-test-salt!0",
+                &mut output,
+                &mut memory[..],
+            )
+            .unwrap();
+        assert!(
+            memory
+                .iter()
+                .any(|block| block.as_ref().iter().any(|&word| word != 0))
+        );
+        let address = memory.as_ptr();
+        let block_count = memory.len();
+        memory.zeroize();
+        assert_eq!(memory.as_ptr(), address);
+        assert_eq!(memory.len(), block_count);
+        assert!(
+            memory
+                .iter()
+                .all(|block| block.as_ref().iter().all(|&word| word == 0))
+        );
     }
 
     #[test]

@@ -23,6 +23,12 @@ hand-encoded protobuf built from the documented field numbers.
 | andOTP plain JSON (`andotp`) | JSON array of objects with `secret`, or `.aes` envelope | Array entries: `secret`, `issuer`, `label`, `type` (`TOTP`/`HOTP`/`STEAM`), `algorithm`, `digits`, `period`/`counter`, `tags` | `.aes` envelope (BE iteration count 140000–160000 + salt + GCM body) → `unsupported_encrypted_format`; `.gpg` never attempted | `andotp_plain.json`, `andotp_encrypted.aes` |
 | Ente plain list / generic otpauth list (`otpauth_list`) | First non-empty line starts with `otpauth://` | One URI per line via the strict otpauth parser | Encrypted Ente JSON → `unsupported_encrypted_format` | `ente_plain.txt`, `otpauth_mixed.txt` |
 
+## Numeric parameter contracts (0.3.0)
+
+Aegis and andOTP may omit digits/period (defaults 6/30) and a HOTP counter (default 0). Explicit null, wrong types, fractional/negative values and out-of-range values are invalid rows, not substitutes for absence. No HOTP counter passes through floating-point conversion; the complete unsigned 64-bit range is preserved.
+
+2FAS differs intentionally: its official [nullable backup OTP model](https://github.com/twofas/2fas-android/blob/main/data/services/src/main/java/com/twofasapp/data/services/domain/BackupService.kt) allows null digits/period, which retain the existing 6/30 defaults. A HOTP counter must still be supplied: absent/null is `missing_counter`, while a present malformed value is `invalid_parameters`. String/negative/fractional/out-of-range digits or period are not treated as defaults. Synthetic fixtures retain the official nullable shape and have dedicated regressions.
+
 ## Recognized but rejected
 
 | Format | Detects | Behavior | Reason | Fixture |

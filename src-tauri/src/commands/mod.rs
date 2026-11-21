@@ -3,7 +3,7 @@ use crate::{AppResult, AppSnapshot, AppState};
 use std::path::{Path, PathBuf};
 
 #[cfg(feature = "desktop")]
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
 
 #[allow(dead_code)]
 pub(crate) fn resolve_vault_path(app_data_dir: &Path) -> PathBuf {
@@ -24,10 +24,7 @@ pub fn vault_status(state: tauri::State<'_, AppState>) -> AppResult<crate::vault
 
 #[cfg(feature = "desktop")]
 #[tauri::command]
-pub fn create_vault(
-    state: tauri::State<'_, AppState>,
-    password: String,
-) -> AppResult<()> {
+pub fn create_vault(state: tauri::State<'_, AppState>, password: String) -> AppResult<()> {
     let app_data_dir = state.data_dir()?;
     let path = resolve_vault_path(&app_data_dir);
     state
@@ -41,6 +38,26 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use super::resolve_vault_path;
+
+    #[test]
+    fn native_import_read_is_bounded_before_and_during_read() {
+        let path =
+            std::env::temp_dir().join(format!("authdesk-bounded-import-{}", uuid::Uuid::new_v4()));
+        let file = std::fs::File::create(&path).unwrap();
+        file.set_len(crate::import::MAX_IMPORT_BYTES as u64 + 1)
+            .unwrap();
+        drop(file);
+        assert!(matches!(
+            super::read_import_file(&path),
+            Err(crate::AppError::InvalidInput)
+        ));
+        std::fs::write(&path, b"synthetic fixture").unwrap();
+        assert_eq!(
+            super::read_import_file(&path).unwrap().as_slice(),
+            b"synthetic fixture"
+        );
+        std::fs::remove_file(path).unwrap();
+    }
 
     #[test]
     fn backend_vault_path_is_fixed_under_app_data_dir() {
@@ -163,7 +180,7 @@ pub fn generate_codes(
     state: tauri::State<'_, AppState>,
     ids: Vec<String>,
 ) -> AppResult<Vec<crate::accounts::CodeView>> {
-    state.accounts.generate_codes(&ids)
+    state.visible_codes(&ids)
 }
 #[cfg(feature = "desktop")]
 #[tauri::command]
@@ -171,7 +188,7 @@ pub fn advance_hotp(
     state: tauri::State<'_, AppState>,
     id: String,
 ) -> AppResult<crate::accounts::CodeView> {
-    state.accounts.advance_hotp(&id)
+    state.advance_visible_hotp(&id)
 }
 #[cfg(feature = "desktop")]
 #[tauri::command]
@@ -197,16 +214,38 @@ pub fn delete_category(state: tauri::State<'_, AppState>, id: String) -> AppResu
 }
 #[cfg(feature = "desktop")]
 #[tauri::command]
-pub fn settings(state: tauri::State<'_, AppState>) -> AppResult<crate::accounts::AppSettings> {
-    state.accounts.settings()
+pub fn settings(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> AppResult<crate::accounts::AppSettings> {
+    let settings = state.accounts.settings()?;
+    // Unlock and hydration read the saved preferences here, so this is where a
+    // launched app first learns whether the host window should be light or dark.
+    crate::desktop::apply_theme(&app, &settings.theme);
+    // Re-seed the locked-screen hint from the authoritative saved value.
+    if let Ok(data_dir) = state.data_dir() {
+        let _ = crate::desktop::save_theme_hint(&data_dir, &settings.theme);
+    }
+    Ok(settings)
 }
 #[cfg(feature = "desktop")]
 #[tauri::command]
 pub fn save_settings(
+    app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     settings: crate::accounts::AppSettings,
 ) -> AppResult<()> {
-    state.accounts.save_settings(settings)
+    state.save_preferences(settings.clone())?;
+    // Keep the host window theme (title bar, native popups, default scrollbars)
+    // in step with the saved preference.
+    crate::desktop::apply_theme(&app, &settings.theme);
+    // Mirror the choice into the non-secret hint so the next launch's locked
+    // screen already uses it.
+    if let Ok(data_dir) = state.data_dir() {
+        let _ = crate::desktop::save_theme_hint(&data_dir, &settings.theme);
+    }
+    app.emit("settings://changed", ())
+        .map_err(|_| crate::AppError::Storage)
 }
 #[cfg(feature = "desktop")]
 #[tauri::command]
@@ -259,6 +298,59 @@ pub fn commit_import(
 }
 #[cfg(feature = "desktop")]
 #[tauri::command]
+pub fn cancel_import_preview(
+    state: tauri::State<'_, AppState>,
+    preview_id: String,
+) -> AppResult<()> {
+    state.imports.cancel_preview(&preview_id)
+}
+
+#[cfg(any(feature = "desktop", test))]
+fn read_import_file(path: &Path) -> crate::AppResult<zeroize::Zeroizing<Vec<u8>>> {
+    use std::io::Read;
+
+    let file = std::fs::File::open(path).map_err(|_| crate::AppError::Storage)?;
+    let metadata = file.metadata().map_err(|_| crate::AppError::Storage)?;
+    let limit = crate::import::MAX_IMPORT_BYTES;
+    if !metadata.is_file() || metadata.len() > limit as u64 {
+        return Err(crate::AppError::InvalidInput);
+    }
+    let mut bytes = zeroize::Zeroizing::new(Vec::with_capacity(metadata.len() as usize));
+    file.take(limit as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| crate::AppError::Storage)?;
+    if bytes.len() > limit {
+        return Err(crate::AppError::InvalidInput);
+    }
+    Ok(bytes)
+}
+
+#[cfg(feature = "desktop")]
+#[tauri::command]
+pub fn pick_import_file(
+    state: tauri::State<'_, AppState>,
+) -> AppResult<Option<crate::import::ImportPreview>> {
+    if state.vault.is_locked() {
+        return Err(crate::AppError::VaultLocked);
+    }
+    let Some(path) = rfd::FileDialog::new()
+        .add_filter(
+            "Authenticator export",
+            &["json", "txt", "xml", "aes", "bin", "csv"],
+        )
+        .pick_file()
+    else {
+        return Ok(None);
+    };
+    let mut bytes = read_import_file(&path)?;
+    state
+        .imports
+        .preview_file(std::mem::take(&mut *bytes))
+        .map(Some)
+}
+
+#[cfg(feature = "desktop")]
+#[tauri::command]
 pub fn activity_touch(state: tauri::State<'_, AppState>) -> AppResult<()> {
     state.vault.touch()
 }
@@ -270,6 +362,7 @@ pub fn change_password(
     next: String,
 ) -> AppResult<()> {
     state.imports.clear()?;
+    state.backups.clear()?;
     state.vault.change_password(
         crate::vault::SecretString::from(current),
         crate::vault::SecretString::from(next),
@@ -317,12 +410,31 @@ pub fn backup_preview_restore(
 #[cfg(feature = "desktop")]
 #[tauri::command]
 pub fn backup_apply_restore(
+    app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     preview_id: String,
     selection: crate::backup::RestoreSelection,
 ) -> AppResult<crate::backup::RestoreResult> {
-    let preview_id = uuid::Uuid::parse_str(&preview_id).map_err(|_| crate::AppError::InvalidInput)?;
-    state.backups.apply_restore(preview_id, selection)
+    let preview_id =
+        uuid::Uuid::parse_str(&preview_id).map_err(|_| crate::AppError::InvalidInput)?;
+    let result = state.backups.apply_restore(preview_id, selection)?;
+    state.imports.clear()?;
+    if result.mode == crate::backup::RestoreMode::Replace {
+        state.lock()?;
+        app.emit("vault://locked", ())
+            .map_err(|_| crate::AppError::Storage)?;
+    }
+    Ok(result)
+}
+
+#[cfg(feature = "desktop")]
+#[tauri::command]
+pub fn backup_cancel_preview(
+    state: tauri::State<'_, AppState>,
+    preview_id: String,
+) -> AppResult<()> {
+    let id = uuid::Uuid::parse_str(&preview_id).map_err(|_| crate::AppError::InvalidInput)?;
+    state.backups.cancel_preview(id)
 }
 
 #[cfg(feature = "desktop")]
@@ -379,7 +491,11 @@ pub fn security_audit(
     state: tauri::State<'_, AppState>,
 ) -> AppResult<crate::security::SecurityAudit> {
     let backup_directory = state.backups.configured_directory()?;
-    crate::security::run_security_audit(&state.vault, &state.data_dir()?, backup_directory.as_deref())
+    crate::security::run_security_audit(
+        &state.vault,
+        &state.data_dir()?,
+        backup_directory.as_deref(),
+    )
 }
 
 #[cfg(feature = "desktop")]
@@ -387,13 +503,25 @@ pub fn security_audit(
 pub fn copy_code(
     state: tauri::State<'_, AppState>,
     account_id: String,
+    expected_code: Option<String>,
 ) -> AppResult<crate::clipboard::ClipboardToken> {
-    let _action = state.desktop_action.lock().map_err(|_| crate::AppError::Storage)?;
+    let _action = state
+        .desktop_action
+        .lock()
+        .map_err(|_| crate::AppError::Storage)?;
     state.vault.touch()?;
     let settings = state.accounts.settings()?;
     let codes = state.accounts.generate_codes(&[account_id.clone()])?;
     let code = codes.first().ok_or(crate::AppError::NotFound)?;
-    let token = state.clipboard.copy(&code.code, settings.clipboard_ttl_secs as u32)?;
+    if expected_code
+        .as_ref()
+        .is_some_and(|expected| expected != &code.code)
+    {
+        return Err(crate::AppError::Conflict);
+    }
+    let token = state
+        .clipboard
+        .copy(&code.code, settings.clipboard_ttl_secs as u32)?;
     if let Err(error) = state.accounts.record_copy(&account_id) {
         let _ = state.clipboard.clear_token(&token.token);
         return Err(error);

@@ -25,8 +25,26 @@ pub const MAX_BACKUP_BYTES: u64 = 64 * 1024 * 1024;
 pub const MAX_PAYLOAD_BYTES: usize = 48 * 1024 * 1024;
 pub const MAX_ACCOUNTS: usize = 10_000;
 pub const MAX_CATEGORIES: usize = 1_000;
+pub const MAX_TAGS: usize = 32;
+pub const MAX_TAG_CHARS: usize = 100;
+pub const MAX_CATEGORY_NAME_CHARS: usize = 100;
+pub const MAX_ISSUER_CHARS: usize = 200;
+pub const MAX_ACCOUNT_NAME_CHARS: usize = 320;
+pub const MAX_NOTES_CHARS: usize = 16_384;
 const NONCE_LEN: usize = 12;
 const FIXED_HEADER_LEN: usize = 8 + 2 + 4 + NONCE_LEN + 8;
+
+/// Rejects payloads that would exceed the decoder's structural bounds.
+///
+/// This check runs before key derivation, plaintext encoding, and any file
+/// write, so an encoder can never produce a document its own decoder (or the
+/// restore validator) would refuse.
+pub(crate) fn check_counts(payload: &BackupPayload) -> AppResult<()> {
+    if payload.accounts.len() > MAX_ACCOUNTS || payload.categories.len() > MAX_CATEGORIES {
+        return Err(AppError::InvalidInput);
+    }
+    Ok(())
+}
 
 #[derive(Clone, Debug, Serialize)]
 pub struct BackupSummary {
@@ -56,6 +74,11 @@ pub(crate) struct BackupPayload {
     pub categories: Vec<CategoryView>,
     pub settings: AppSettings,
     pub metadata: BackupMetadata,
+    /// Stable vault identity. Only authentic documents (verified AEAD) may
+    /// claim an identity; legacy documents decode with `None` and must be
+    /// treated as unowned by destructive retention.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vault_id: Option<String>,
 }
 impl Drop for BackupPayload {
     fn drop(&mut self) {
@@ -69,6 +92,9 @@ impl Drop for BackupPayload {
         self.settings.default_algorithm.zeroize();
         self.metadata.application.zeroize();
         self.metadata.created_at.zeroize();
+        if let Some(id) = self.vault_id.as_mut() {
+            id.zeroize();
+        }
     }
 }
 #[derive(Serialize, Deserialize)]
@@ -87,6 +113,7 @@ pub(crate) fn encode(payload: &BackupPayload, password: &SecretString) -> AppRes
     if password.is_empty() {
         return Err(AppError::InvalidInput);
     }
+    check_counts(payload)?;
     let plaintext =
         Zeroizing::new(serde_json::to_vec(payload).map_err(|_| AppError::InvalidInput)?);
     if plaintext.len() > MAX_PAYLOAD_BYTES {
@@ -130,6 +157,13 @@ pub(crate) fn encode(payload: &BackupPayload, password: &SecretString) -> AppRes
         return Err(AppError::InvalidInput);
     }
     Ok(output)
+}
+
+fn decode_payload(bytes: &[u8]) -> AppResult<BackupPayload> {
+    let payload: BackupPayload =
+        serde_json::from_slice(bytes).map_err(|_| AppError::InvalidInput)?;
+    check_counts(&payload)?;
+    Ok(payload)
 }
 
 pub(crate) fn decode_file(path: &Path, password: &SecretString) -> AppResult<DecodedBackup> {
@@ -201,11 +235,7 @@ pub(crate) fn decode_file(path: &Path, password: &SecretString) -> AppResult<Dec
     if plaintext.len() > MAX_PAYLOAD_BYTES {
         return Err(AppError::InvalidInput);
     }
-    let payload: BackupPayload =
-        serde_json::from_slice(&plaintext).map_err(|_| AppError::InvalidInput)?;
-    if payload.accounts.len() > MAX_ACCOUNTS || payload.categories.len() > MAX_CATEGORIES {
-        return Err(AppError::InvalidInput);
-    }
+    let payload = decode_payload(&plaintext)?;
     let summary = BackupSummary {
         path: path.to_string_lossy().into_owned(),
         account_count: payload.accounts.len(),
@@ -246,4 +276,87 @@ pub(crate) fn write_new_atomic(path: &Path, bytes: &[u8]) -> AppResult<()> {
     })();
     let _ = fs::remove_file(&temp);
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        BackupAccount, BackupMetadata, BackupPayload, MAX_ACCOUNTS, MAX_CATEGORIES, check_counts,
+        decode_payload, encode,
+    };
+    use crate::{
+        accounts::{AccountData, AppSettings, CategoryView},
+        vault::SecretString,
+    };
+
+    fn payload(account_count: usize, category_count: usize) -> BackupPayload {
+        let accounts = (0..account_count)
+            .map(|index| BackupAccount {
+                data: AccountData {
+                    id: format!("account-{index}"),
+                    issuer: "Issuer".into(),
+                    account_name: format!("account-{index}"),
+                    algorithm: "SHA1".into(),
+                    digits: 6,
+                    kind: "totp".into(),
+                    period_secs: 30,
+                    t0: "0".into(),
+                    hotp_counter: "0".into(),
+                    category_id: None,
+                    tags: Vec::new(),
+                    notes: String::new(),
+                    favorite: false,
+                    sort_order: index as i64,
+                    created_at: "2026-01-01T00:00:00Z".into(),
+                    updated_at: "2026-01-01T00:00:00Z".into(),
+                },
+                secret: vec![1, 2, 3],
+            })
+            .collect();
+        let categories = (0..category_count)
+            .map(|index| CategoryView {
+                id: format!("category-{index}"),
+                name: format!("Category {index}"),
+                color: "#123456".into(),
+            })
+            .collect();
+        BackupPayload {
+            accounts,
+            categories,
+            settings: AppSettings::default(),
+            metadata: BackupMetadata {
+                application: "AUTHENTICATOR DESK".into(),
+                created_at: "2026-01-01T00:00:00Z".into(),
+            },
+            vault_id: None,
+        }
+    }
+
+    #[test]
+    fn encoder_rejects_counts_above_decoder_limits_before_kdf_or_write() {
+        let oversized_accounts = payload(MAX_ACCOUNTS + 1, 0);
+        assert!(check_counts(&oversized_accounts).is_err());
+        assert!(encode(&oversized_accounts, &SecretString::from("password")).is_err());
+
+        let oversized_categories = payload(0, MAX_CATEGORIES + 1);
+        assert!(check_counts(&oversized_categories).is_err());
+        assert!(encode(&oversized_categories, &SecretString::from("password")).is_err());
+    }
+
+    #[test]
+    fn decoder_payload_path_enforces_the_same_counts_and_reads_legacy_documents() {
+        let oversized_accounts = payload(MAX_ACCOUNTS + 1, 0);
+        let encoded = serde_json::to_vec(&oversized_accounts).unwrap();
+        assert!(decode_payload(&encoded).is_err());
+
+        let oversized_categories = payload(0, MAX_CATEGORIES + 1);
+        let encoded = serde_json::to_vec(&oversized_categories).unwrap();
+        assert!(decode_payload(&encoded).is_err());
+
+        // The identity field is optional for format-v1 documents created by
+        // earlier releases, preserving their decode compatibility.
+        let legacy = br#"{"accounts":[],"categories":[],"settings":{},"metadata":{"application":"AUTHENTICATOR DESK","created_at":"2026-01-01T00:00:00Z"}}"#;
+        let decoded = decode_payload(legacy).unwrap();
+        assert!(decoded.vault_id.is_none());
+    }
 }

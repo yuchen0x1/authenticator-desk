@@ -1,7 +1,7 @@
 use super::model::*;
 use crate::{
     AppError, AppResult,
-    otp::{MonotonicClock, decode_base32, generate_code, time_state},
+    otp::{MonotonicClock, OtpKind, decode_base32, generate_code, time_state},
     vault::{VaultService, decrypt_record, encrypt_record, record_aad},
 };
 use chrono::Utc;
@@ -196,6 +196,42 @@ impl AccountService {
                     code_view(&a, &s, unix)
                 })
                 .collect()
+        })
+    }
+    pub fn generate_available_codes(&self, ids: &[String]) -> AppResult<Vec<CodeView>> {
+        let sample = self
+            .clock
+            .lock()
+            .map_err(|_| AppError::Storage)?
+            .sample_system()?;
+        let mut codes = self.generate_available_codes_at(ids, sample.unix_seconds)?;
+        for code in &mut codes {
+            code.clock_offset_secs = sample.clock_offset_secs;
+            code.wall_clock_jump = sample.wall_clock_jump;
+        }
+        Ok(codes)
+    }
+    pub fn generate_available_codes_at(
+        &self,
+        ids: &[String],
+        unix: i64,
+    ) -> AppResult<Vec<CodeView>> {
+        validate_ids(ids)?;
+        self.vault.with_database(false, |conn, key, _, _| {
+            let mut codes = Vec::with_capacity(ids.len());
+            for id in ids {
+                let (account, secret) = load_account(conn, key, id)?;
+                if !["totp", "hotp"].contains(&account.kind.as_str()) {
+                    return Err(AppError::InvalidParameters);
+                }
+                let config = account.config(&secret)?;
+                config.validate()?;
+                if matches!(config.kind, OtpKind::Totp { t0, .. } if unix < t0) {
+                    continue;
+                }
+                codes.push(code_view(&account, &secret, unix)?);
+            }
+            Ok(codes)
         })
     }
     pub fn advance_hotp(&self, id: &str) -> AppResult<CodeView> {

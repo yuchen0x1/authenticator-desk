@@ -6,6 +6,7 @@ type Version = { version: string; available: boolean };
 type Release = { version: string; date: string; notes: string; bytes: number };
 type Progress = { received: number; total: number };
 type Status = "current" | "failed" | "integrity" | "incompatible";
+type Operation = "checking" | "installing" | null;
 
 const copy = {
   en: {
@@ -52,6 +53,9 @@ export function UpdateSettings({ locale }: { locale: string }) {
   const [progress, setProgress] = useState<Progress>();
   const started = useRef(0);
   const dialog = useRef<HTMLDialogElement>(null);
+  const checkButton = useRef<HTMLButtonElement>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const operation = useRef<Operation>(null);
 
   useEffect(() => {
     let active = true;
@@ -72,6 +76,9 @@ export function UpdateSettings({ locale }: { locale: string }) {
   }
 
   async function check() {
+    if (operation.current !== null) return;
+    operation.current = "checking";
+    returnFocus.current = checkButton.current;
     setPhase("checking");
     setStatus(undefined);
     try {
@@ -81,12 +88,16 @@ export function UpdateSettings({ locale }: { locale: string }) {
     } catch (reason) {
       report(reason);
     } finally {
-      setPhase("idle");
+      if (operation.current === "checking") {
+        operation.current = null;
+        setPhase("idle");
+      }
     }
   }
 
   async function install() {
-    if (!release) return;
+    if (!release || operation.current !== null) return;
+    operation.current = "installing";
     setPhase("installing");
     setStatus(undefined);
     setProgress(undefined);
@@ -97,24 +108,33 @@ export function UpdateSettings({ locale }: { locale: string }) {
       await tauriInvoke("install_update", { version: release.version, progress: channel });
     } catch (reason) {
       report(reason);
+      operation.current = null;
       setPhase("idle");
     }
+  }
+
+  function closeDialog() {
+    setRelease(undefined);
+    const target = returnFocus.current;
+    returnFocus.current = null;
+    if (target?.isConnected && !target.matches(":disabled")) target.focus();
   }
 
   if (!version) return null;
   const installing = phase === "installing";
   const speed = progress ? size(progress.received / Math.max(1, (performance.now() - started.current) / 1000)) + "/s" : "";
+  const statusIsError = status === "failed" || status === "integrity" || status === "incompatible";
 
-  return <section className="settings-group mt-5" aria-labelledby="updates-title">
+  return <section className="settings-group mt-5" aria-labelledby="updates-title" aria-busy={phase !== "idle"}>
     <h3 id="updates-title">{t.title} · {version.version}</h3>
     {version.available
-      ? <button type="button" className="button button-subtle mt-3" disabled={phase !== "idle"}
+      ? <button ref={checkButton} type="button" className="button button-subtle mt-3" disabled={phase !== "idle" || operation.current !== null}
           onClick={() => void check()}>{phase === "checking" ? t.checking : t.check}</button>
       : <p className="mt-2 text-sm">{t.manual}</p>}
-    {status && !release && <p role="status" className="mt-3 text-sm">{t[status]}</p>}
-    <dialog ref={dialog} aria-labelledby="update-dialog-title" className="dialog-panel dialog-small m-auto backdrop:bg-black/65"
-      onClose={() => setRelease(undefined)}
-      onCancel={(event) => { if (installing) event.preventDefault(); }}>
+    {status && !release && <p role={statusIsError ? "alert" : "status"} aria-live={statusIsError ? "assertive" : "polite"} className="mt-3 text-sm">{t[status]}</p>}
+    <dialog ref={dialog} aria-labelledby="update-dialog-title" className="dialog-panel dialog-small m-auto"
+      onClose={closeDialog}
+      onCancel={(event) => { if (operation.current === "installing") event.preventDefault(); }}>
       {release && <>
         <h2 id="update-dialog-title">AUTHENTICATOR DESK · {t.offer}</h2>
         <p className="mt-3">{version.version} → {release.version} · {release.date} · {size(release.bytes)}</p>
@@ -122,16 +142,16 @@ export function UpdateSettings({ locale }: { locale: string }) {
           <summary>{t.notes}</summary>
           <div className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap text-sm">{release.notes}</div>
         </details>
-        {installing && <div className="mt-4" role="status">
+        {installing && <div className="mt-4" role="status" aria-live="polite">
           <p>{progress && progress.received === progress.total ? t.verifying : t.downloading}</p>
           <progress aria-label={t.downloading} className="w-full" value={progress?.received} max={release.bytes} />
           {progress && <p className="text-sm">{size(progress.received)} / {size(release.bytes)} · {speed}</p>}
         </div>}
-        {status && <p role="alert" className="mt-3 text-sm">{t[status]}</p>}
+        {status && <p role="alert" aria-live="assertive" className="mt-3 text-sm">{t[status]}</p>}
         <div className="mt-5 flex flex-wrap justify-end gap-2">
           <button type="button" className="button button-subtle" autoFocus
             onClick={() => dialog.current?.close()} disabled={installing}>{t.later}</button>
-          <button type="button" className="button button-primary" onClick={() => void install()} disabled={installing}>{t.install}</button>
+          <button type="button" className="button button-primary" onClick={() => void install()} disabled={installing || operation.current !== null}>{t.install}</button>
         </div>
       </>}
     </dialog>
