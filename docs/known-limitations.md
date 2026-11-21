@@ -1,6 +1,6 @@
 # Known limitations
 
-Recorded on 2026-11-18.
+Updated on 2026-11-21 (Asia/Shanghai). Dated historical acceptance remains in the test report.
 
 ## Encrypted third-party migration formats
 
@@ -37,9 +37,44 @@ Recorded on 2026-11-18.
 - Automatic backups are encrypted with the same `.authdesk` envelope and
   require the backup password to restore; they are not a DPAPI-managed
   convenience copy.
+- Automatic retention only deletes files proven by this vault's encrypted
+  ownership manifest and digest. Legacy-unclaimed, foreign, manual or changed
+  files are intentionally preserved. Non-Windows builds currently preserve
+  all backup files because portable exact-handle deletion is unavailable.
+- New automatic backups add authenticated ownership metadata; current code
+  reads legacy backups, but older app versions are not promised to read new
+  automatic-backup metadata. Keep a prior known-good backup before downgrading.
 
 ## Operational
 
 - The update check is user-initiated. TOTP/HOTP uses local time and there is no sync service, account, or telemetry.
-- If the SQLite vault is corrupted beyond the integrity check, restore is
-  possible only from a previous encrypted backup.
+- Recovery requires a known-good encrypted backup and its password. A valid
+  unlock/settings load with damaged account rows offers a restricted
+  Backup/Security surface; confirmed Replace does not decrypt outgoing account
+  rows. It does not repair arbitrary SQLite corruption, a damaged vault header,
+  or encrypted settings that cannot be loaded. Preserve the original file and
+  restore to a separate vault when normal recovery cannot start.
+- The single-writer lease protects cooperating clients using the same canonical
+  path, including while their UI is locked. Older versions, deliberate hard-link
+  aliases and external replacement of database/sidecar files are outside that
+  contract. Fully exit all versions before upgrading; do not remove `.lock`
+  sidecars while an owning process is alive.
+- Source review identified remaining follow-ups, not completed acceptance:
+  a future `T0` entry can fail an entire code batch before its start time;
+  malformed numeric fields in some legacy JSON imports can fall back to defaults;
+  transient Windows clipboard contention has no scheduled-clear retry; automatic
+  backup failures lack a last-attempt/error UI; and cold locked launch uses the
+  default locale until encrypted settings are available. See the prioritized
+  [backlog](../AUTONOMOUS_TASKS.md).
+- Backup publication uses hard-link no-overwrite semantics. FAT32/exFAT and network
+  filesystem compatibility have not been qualified; do not assume they work.
+
+## 0.3.0 / 2026-11-21 addendum
+
+This addendum records the current local-source boundaries; the dated historical entries above remain intact.
+
+- Automatic-backup last-success metadata is encrypted and survives restarts and disabling the feature. Attempt/failure status is limited to the current session/configuration/generation. Enabling a new configuration resets its schedule/`last_run`; disabling preserves the last-success record. This is not proof of unattended end-to-end backup recovery on every target filesystem.
+- Secret replacement retry, future-T0 display isolation, source-specific numeric import validation, and ownership-aware bounded clipboard expiry retry were locally regression-tested. They are not proof of broader OS-level erasure or native user-flow acceptance.
+- Full native GUI acceptance was not completed: the UI broker could not connect. An isolated explicit-target executable process responded with the expected title and created no files; it did not create/unlock a vault and the real user process was not touched.
+- The local 0.3.0 Windows executable and NSIS/MSI outputs have no Authenticode signature and are not published release assets. No genuine signed prior-version upgrade/reopen-vault test was run.
+- Shared transactional capacity/backup-limit enforcement, zero-account settings/backup restore UX, import error classification, backup filename collision UX, editing accounts without an issuer, Windows clipboard-history/cloud opt-out, intermediate plaintext-copy zeroization, default algorithm/font-size choices, and non-NTFS/network durability remain follow-ups. See the current [backlog](../AUTONOMOUS_TASKS.md).

@@ -1,5 +1,41 @@
 # Authenticator ecosystem research
 
+## Focused recheck — 2026-11-21 (Asia/Shanghai)
+
+Read GitHub's repository metadata, the default-branch READMEs, and the primary
+implementation/format documents linked below. This is a design comparison, not a
+runtime benchmark or an independent security audit of those projects. `pushed_at`
+is not a substitute for commit activity: the extension repository has a recent
+push date but its default-branch HEAD is still from 2024.
+
+| Reference / observed HEAD | License checked | Concrete evidence and useful direction | Boundary for this project |
+| --- | --- | --- | --- |
+| [Aegis](https://github.com/beemdevelopment/Aegis/tree/d6f4e5925a97e4e91593f1542085eae03432a759) · 2026-09-06 | GPL-3.0; README/license declaration | [Vault specification](https://github.com/beemdevelopment/Aegis/blob/d6f4e5925a97e4e91593f1542085eae03432a759/docs/vault.md): authenticated encryption, credential slots, explicit format versions; README documents encrypted export, groups, search and automatic backup. | Keep authenticated, versioned backups and clear import errors. Do not copy GPL implementation or biometric key-slot assumptions into the MIT Windows core. |
+| [Ente Auth](https://github.com/ente/ente/tree/9754ed23a28d745651c5e3443e1805ee377b7849/mobile/apps/auth) · 2026-11-20 | AGPL-3.0; repository metadata | [Local backup service](https://github.com/ente/ente/blob/9754ed23a28d745651c5e3443e1805ee377b7849/mobile/apps/auth/lib/services/local_backup_service.dart): encrypt before writing, record success after writing, prune after success; Flutter desktop/mobile, optional encrypted sync. | Learn backup ordering and failure visibility. Do not add a mandatory account, network service, or copy AGPL code. |
+| [2FAS Android](https://github.com/twofas/2fas-android/tree/4ad83b2b94967993db55dd36dcb2e258646eb7b6) · 2026-10-31 | GPL-3.0; README; graphics explicitly separately licensed | [SupportedService](https://github.com/twofas/2fas-android/blob/4ad83b2b94967993db55dd36dcb2e258646eb7b6/parsers/src/main/java/com/twofasapp/parsers/domain/SupportedService.kt) separates issuer/label matching rules from tokens. README documents TOTP/HOTP and Android distribution. | Retain explicit parser contracts and standard OTP parameters. Do not import their branded graphics or introduce untrusted regular-expression rules. |
+| [KeePassXC](https://github.com/keepassxreboot/keepassxc/tree/cd42236540c1cfca332c0f051d981acfdacf7b4e) · 2026-11-17 | [COPYING](https://github.com/keepassxreboot/keepassxc/blob/cd42236540c1cfca332c0f051d981acfdacf7b4e/COPYING): GPL-2 or GPL-3; file-specific exceptions | [TOTP core](https://github.com/keepassxreboot/keepassxc/blob/cd42236540c1cfca332c0f051d981acfdacf7b4e/src/core/Totp.cpp) separates encoder/hash/settings; Qt/C++ UI offers groups, advanced search, keyboard shortcuts and encrypted offline databases. | Keep provider encoders explicit instead of silently treating Steam as numeric TOTP. Password-manager/browser integration remains a separate product scope. |
+| [Authenticator Extension](https://github.com/Authenticator-Extension/Authenticator/tree/9d9660bb73700b3e725800edc22836662d94afac) · 2024-10-10 | MIT; repository metadata | [Backup state](https://github.com/Authenticator-Extension/Authenticator/blob/9d9660bb73700b3e725800edc22836662d94afac/src/store/Backup.ts) tracks encryption and provider connectivity separately; browser UI supports search, export and browser sync. | Show backup status accurately, but keep browser permissions/cloud credentials out of the desktop vault. Do not describe this default branch as recently maintained. |
+| [Stratum](https://github.com/stratumauth/app/tree/86c4e7c520ce30a21fa2887f1ae484442f06225d) · 2026-11-01 | GPL-3.0; README declaration | [Backup format](https://github.com/stratumauth/app/blob/86c4e7c520ce30a21fa2887f1ae484442f06225d/doc/BACKUP_FORMAT.md) explicitly distinguishes token types and legacy/Argon2id authenticated backup envelopes; Android/Wear OS, categories and light/dark themes. | Format versioning and parameter preservation matter more than adding unsupported token types. Encrypted Stratum import is not implemented or advertised. |
+| [Authme](https://github.com/Levminer/authme/tree/4bea3e169a7e21a89a1931a4120e57aa685fa876) · 2026-11-18 | GPL-3.0; README/license declaration | [Cargo manifest](https://github.com/Levminer/authme/blob/4bea3e169a7e21a89a1931a4120e57aa685fa876/core/Cargo.toml) confirms Tauri 2/Rust; [import UI](https://github.com/Levminer/authme/blob/4bea3e169a7e21a89a1931a4120e57aa685fa876/interface/windows/import/index.ts) separates migration entry points and clears manual-entry fields when dismissed. | Preserve the existing Rust-owned parsing/redacted preview boundary rather than copying frontend plaintext state or broad filesystem/shell plugins. |
+
+### Comparison against the current working tree
+
+| Dimension | AUTHENTICATOR DESK | Reference evidence | Upgrade decision |
+| --- | --- | --- | --- |
+| Core functionality | TOTP/HOTP, encrypted account CRUD, categories/tags, favorites, QR and plaintext migration, encrypted backup/restore | Aegis/Stratum offer more provider encoders; Ente adds optional sync | Prioritize correctness and interoperable formats before new token types or sync. |
+| UI/UX | Desktop code cards, quick panel, four locales, light/dark settings, keyboard dialogs | Aegis/Stratum organization; KeePassXC keyboard/search; Authme dedicated migration flows | Improve actual failure/retry flows without redesigning working navigation. |
+| Performance | One clock snapshot for code rendering; bounded input and KDF work | Native/Flutter/browser implementations have different costs | No cross-project speed or memory ranking: none was measured. Retain input bounds and benchmark before claiming gains. |
+| Architecture | React invokes typed commands; Rust owns cryptography, SQLite and native integrations | Authme shares Tauri; KeePassXC separates OTP settings/encoders | Keep least-privilege IPC and isolate lifecycle concerns; no framework rewrite. |
+| Security/data | Local password-derived authenticated vault; no cloud or telemetry; signed update metadata | Aegis/Stratum authenticated backup contracts; Ente write-before-prune ordering | Preserve old vault/backup readability; fail closed on invalid data and signatures. |
+| Extensibility/distribution | Rust format adapters; Windows x64 installers; portable core tests | Peers separately package OS/mobile/browser integrations | Do not claim full Linux/macOS desktop support from portable core tests. Release only after native installer acceptance. |
+
+No third-party implementation, artwork, or dependencies were copied during this
+recheck. Repository license labels are recorded for provenance; any future code
+reuse needs a file-level compatibility review. The 2026-11-18 broad survey below
+is retained as historical evidence, not silently relabeled as today's research.
+
+## Broad survey — 2026-11-18
+
 Snapshot on 2026-11-18. The table records GitHub metadata, default-branch commit history, latest published Release, open issue evidence, source paths and CI entry points. Activity counts show commits in the preceding 30/90/180 days. Monorepo counts span the entire repository. NOASSERTION means GitHub did not identify a single SPDX license. Code and product assets were read for reference. AUTHENTICATOR DESK keeps its MIT license.
 
 ## Research set

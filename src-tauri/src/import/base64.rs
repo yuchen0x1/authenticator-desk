@@ -2,7 +2,9 @@ use zeroize::Zeroizing;
 
 use crate::{AppError, AppResult};
 
-const MAX_ENCODED_LEN: usize = 1 << 20;
+pub(crate) const MAX_DECODED_BYTES: usize = 2 * 1024 * 1024;
+/// Reject oversized transport text before allocating or scanning it.
+const MAX_ENCODED_LEN: usize = MAX_DECODED_BYTES / 3 * 4 + 4;
 
 fn value_of(byte: u8) -> Option<u8> {
     match byte {
@@ -55,6 +57,9 @@ pub fn decode_base64(encoded: &str) -> AppResult<Zeroizing<Vec<u8>>> {
         return Err(AppError::InvalidInput);
     }
     let decoded_len = data * 3 / 4;
+    if decoded_len > MAX_DECODED_BYTES {
+        return Err(AppError::InvalidInput);
+    }
     let mut output = Zeroizing::new(Vec::with_capacity(decoded_len));
     let mut buffer = 0u32;
     let mut bits = 0u8;
@@ -70,7 +75,7 @@ pub fn decode_base64(encoded: &str) -> AppResult<Zeroizing<Vec<u8>>> {
     if bits > 0 && buffer != 0 {
         return Err(AppError::InvalidInput);
     }
-    if output.len() != decoded_len {
+    if output.len() != decoded_len || output.len() > MAX_DECODED_BYTES {
         return Err(AppError::InvalidInput);
     }
     Ok(output)
@@ -78,7 +83,22 @@ pub fn decode_base64(encoded: &str) -> AppResult<Zeroizing<Vec<u8>>> {
 
 #[cfg(test)]
 mod tests {
-    use super::decode_base64;
+    use super::{MAX_DECODED_BYTES, MAX_ENCODED_LEN, decode_base64};
+
+    #[test]
+    fn transport_accepts_two_mib_and_rejects_larger_decoded_or_encoded_inputs() {
+        let mut encoded = "A".repeat((MAX_DECODED_BYTES * 4).div_ceil(3));
+        assert_eq!(decode_base64(&encoded).unwrap().len(), MAX_DECODED_BYTES);
+        encoded.push('=');
+        assert_eq!(decode_base64(&encoded).unwrap().len(), MAX_DECODED_BYTES);
+        encoded.pop();
+        encoded.push('A');
+        assert!(encoded.len() <= MAX_ENCODED_LEN);
+        assert!(decode_base64(&encoded).is_err());
+        encoded.push('A');
+        assert!(encoded.len() > MAX_ENCODED_LEN);
+        assert!(decode_base64(&encoded).is_err());
+    }
 
     #[test]
     fn decodes_standard_and_url_safe_alphabets() {

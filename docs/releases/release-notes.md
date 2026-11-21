@@ -1,6 +1,34 @@
 # AUTHENTICATOR DESK release notes
 
+## v0.3.1 (prepared; not published)
+
+- Bind account-save completion to the originating vault session and dialog lifetime.
+- Initialize edits from authenticated details; keep full HOTP counter precision and block Edit during a local advance.
+- Allow empty optional issuer fields and preserve colons in plain Aegis native account names.
+- Align T0 and expiry time bases in cards and favorites; pin release creation to the verified tag SHA.
+- Includes the unreleased 0.3.0/0.2.1 source below. [Candidate notes, verification and publication boundaries](v0.3.1.md)
+
+## v0.3.0 (unreleased separately; included in the 0.3.1 candidate)
+
+- Show session-bound automatic-backup attempts/failures separately from last success, with safe periodic/manual refresh.
+- Isolate future-T0 accounts from other displayed codes and show a localized pending state.
+- Require explicit retry/cancel intent after failed secret replacement.
+- Validate legacy numeric import fields strictly without losing 64-bit HOTP precision.
+- Retry clipboard expiry safely using one cancellable worker and bounded backoff.
+- Execute desktop-feature contracts in CI; retain signed release and independent installer gates.
+- Includes the unreleased 0.2.1 safety fixes below. [Release details and known limits](v0.3.0.md)
+
+## v0.2.1 (unreleased separately; included in v0.3.0)
+
+- Limit Vitest to TypeScript test/spec files under `src/`, keeping Node.js test scripts out of the frontend runner.
+- Run the release-context security tests independently with `node --test` in CI.
+- Implement the trusted-invocation allowlist for this repository's version-tag pushes and matching release workflow reference.
+- Add OS-held vault writer exclusion, UTC-correction handling, authenticated corrupt-account recovery, cross-window privacy and bounded migration/backup lifecycle fixes.
+- Run NSIS and MSI lifecycle checks on separate fresh runners. [Patch details and qualification boundaries](v0.2.1.md)
+
 ## v0.2.0
+
+At the 2026-11-21 remote inspection, this published release entry had **zero assets**. The feature description below is historical scope, not proof of available verified downloads or a working public update channel. Do not treat an empty release as an installable update.
 
 - Check for signed Windows updates in Settings. Review the release notes, date and download size before installing.
 - Release downloads include SHA-256 files and separate signed packages for EXE and MSI installations.

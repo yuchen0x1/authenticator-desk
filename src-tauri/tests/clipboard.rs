@@ -1,29 +1,62 @@
-use authenticator_desk_lib::AppResult;
 use authenticator_desk_lib::clipboard::{ClipboardBackend, ClipboardService};
-use std::sync::{Arc, Mutex};
+use authenticator_desk_lib::{AppError, AppResult};
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::Duration;
 
 #[derive(Default)]
-struct FakeClipboard(Mutex<(String, u32)>);
+struct Contents {
+    text: String,
+    sequence: u32,
+    writes: usize,
+    clear_attempts: usize,
+    clear_failures: usize,
+}
+
+#[derive(Default)]
+struct FakeClipboard {
+    contents: Mutex<Contents>,
+    changed: Condvar,
+}
 impl FakeClipboard {
     fn user_copy(&self, text: &str) {
-        let mut c = self.0.lock().unwrap();
-        c.0 = text.into();
-        c.1 += 1;
+        let mut c = self.contents.lock().unwrap();
+        c.text = text.into();
+        c.sequence += 1;
     }
     fn text(&self) -> String {
-        self.0.lock().unwrap().0.clone()
+        self.contents.lock().unwrap().text.clone()
+    }
+    fn wait_for_empty(&self) {
+        let contents = self.contents.lock().unwrap();
+        let (contents, _) = self
+            .changed
+            .wait_timeout_while(contents, Duration::from_secs(5), |c| !c.text.is_empty())
+            .unwrap();
+        assert!(
+            contents.text.is_empty(),
+            "scheduled clipboard clear did not finish"
+        );
     }
 }
 impl ClipboardBackend for FakeClipboard {
     fn write(&self, text: &str) -> AppResult<u32> {
-        self.user_copy(text);
-        Ok(self.0.lock().unwrap().1)
+        let mut c = self.contents.lock().unwrap();
+        c.text = text.into();
+        c.sequence += 1;
+        c.writes += 1;
+        Ok(c.sequence)
     }
     fn clear_if_matches(&self, text: &str, sequence: u32) -> AppResult<bool> {
-        let mut c = self.0.lock().unwrap();
-        if c.0 == text && c.1 == sequence {
-            c.0.clear();
-            c.1 += 1;
+        let mut c = self.contents.lock().unwrap();
+        c.clear_attempts += 1;
+        if c.clear_failures > 0 {
+            c.clear_failures -= 1;
+            return Err(AppError::Storage);
+        }
+        if c.text == text && c.sequence == sequence {
+            c.text.clear();
+            c.sequence += 1;
+            self.changed.notify_all();
             Ok(true)
         } else {
             Ok(false)
@@ -56,8 +89,20 @@ fn scheduled_clear_and_lock_cleanup_cancel_stale_tokens() {
     assert!(service.clear_owned().unwrap());
     assert!(!service.clear_token(&new.token).unwrap());
     service.copy("333333", 1).unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(1150));
+    backend.wait_for_empty();
     assert_eq!(backend.text(), "");
+}
+#[test]
+fn expiry_retries_transient_failures_without_writing_the_code_again() {
+    let backend = Arc::new(FakeClipboard::default());
+    backend.contents.lock().unwrap().clear_failures = 3;
+    let service = ClipboardService::with_backend(backend.clone());
+    let token = service.copy("123456", 1).unwrap();
+    backend.wait_for_empty();
+    assert!(!service.clear_token(&token.token).unwrap());
+    let contents = backend.contents.lock().unwrap();
+    assert_eq!(contents.clear_attempts, 4);
+    assert_eq!(contents.writes, 1);
 }
 #[test]
 fn validates_codes_and_ttl_and_clears_on_last_service_drop() {
