@@ -30,8 +30,8 @@
   <a href="https://github.com/yuchen0x1/authenticator-desk/issues">問題回報</a>
 </p>
 
-> **已發行版本：** [v0.3.1](https://github.com/yuchen0x1/authenticator-desk/releases/tag/v0.3.1)，由版本標籤指向的提交 `7ae5151e3041487f9e46ac4cec943fbd20553daf` 建置。本文所述的安裝程式與驗證紀錄都對應該已發行版本，並非這次文件更新重新打包的成果。
-> 發行頁面提供 NSIS（`.exe`）及 MSI 安裝程式、分離式更新簽章、總和檢查碼與 `update.json`。
+> **本原始碼版本：v0.3.2** · [發行說明](docs/releases/v0.3.2.md)
+> Windows 安裝程式的公開狀態以 [GitHub 最新發行頁面](https://github.com/yuchen0x1/authenticator-desk/releases/latest)為準。原始碼版本號不代表對應的安裝程式已發行或已通過簽章驗證。
 
 ## 為什麼選擇 AUTHENTICATOR DESK？
 
@@ -170,6 +170,7 @@ TOTP 仰賴本機系統時鐘；時間不準確可能導致驗證碼無法使用
 - 刻意不支援第三方加密匯出格式，不會嘗試猜測如何解密。
 - 已發行的 v0.3.1 安裝程式，其 Authenticode 狀態為 **`NotSigned`**。更新程式所使用的 Minisign 簽章用於驗證發行檔案的完整性，並非 Windows 發行者憑證。
 - **仍有 1 項未解決的相依套件安全告警：** Linux GTK 的間接相依套件 `glib 0.18.5` 涉及 `RUSTSEC-2024-0429`。它不在 Windows x64 目標的相依關係圖中，但鎖定檔案中的告警尚未修復，仍待上游處理。請參閱[未解決的相依套件安全告警](docs/known-limitations.md#open-dependency-security-advisory)。
+- macOS 核心 CI 曾有一次密碼輪替測試失敗；加入診斷資訊後未再發生，根因仍未確認，不能視為正式環境的修正。
 - Windows 11 x64 是原生桌面版的驗收目標。Linux 與 macOS 的 CI 驗證的是可攜式核心，而不是完整的原生桌面體驗。
 - Windows Hello、相機擷取、第三方加密備份解密、雲端同步及密碼復原不是目前已實作的功能。發行者簽署、排除剪貼簿歷程記錄及雲端同步、從舊版執行實際的簽章自動更新與回復、MSI 舊版升級、Windows ACL 檢查及完整原生操作，均需另行驗收。請參閱[已知限制](docs/known-limitations.md)與[測試報告](docs/test-report.md)。
 
@@ -210,14 +211,14 @@ flowchart LR
 
 ## 下載與升級
 
-請從 GitHub Releases 下載已發行的 [v0.3.1](https://github.com/yuchen0x1/authenticator-desk/releases/tag/v0.3.1)：
+請從 [GitHub 最新發行頁面](https://github.com/yuchen0x1/authenticator-desk/releases/latest)下載已公開的 Windows x64 安裝程式：
 
 - 選擇 NSIS（`.exe`）或 MSI 安裝程式。
 - 升級時請沿用同一類型的安裝程式。
 - 請驗證 `SHA256SUMS.txt` 中的總和檢查碼；若您的流程支援 Minisign，也請驗證分離式 `.sig` 檔案。
 - 安裝前請備份保險庫，並完全結束所有執行中的用戶端程式。
 
-已發行版本包含七個檔案：兩個安裝程式、兩個分離式簽章、`release-assets.json`、`SHA256SUMS.txt` 及 `update.json`。[發行後測試報告](docs/test-report.md)記錄了獨立下載驗證，以及在隔離環境中實際以 NSIS 手動從 v0.1.0 升級至 v0.3.1 的結果。這些紀錄**不代表**安裝程式具備 Windows 發行者憑證，也不能證明 MSI 舊版升級或自動更新安裝已通過完整驗收。
+[歷史測試報告](docs/test-report.md)記錄了 v0.3.1 下載檔案的獨立驗證，以及在隔離環境中從 v0.1.0 **以 NSIS 手動升級**至 v0.3.1 並重新開啟原有保險庫的結果。這些紀錄不代表 v0.3.2 已通過驗證，也不能證明自動更新安裝或 MSI 舊版升級已通過驗收。
 
 ## 開發環境
 
@@ -277,7 +278,8 @@ cargo check --locked --manifest-path src-tauri/Cargo.toml --features signed-upda
 | [測試報告](docs/test-report.md) | 附日期的本機測試、託管 CI、打包、發行及升級驗證紀錄 |
 | [維護紀錄](docs/maintenance.md) | 平台選擇與發行驗收條件 |
 | [發行歷程](docs/releases/release-notes.md) | 已發行及候選版本的說明 |
-| [v0.3.1 發行說明](docs/releases/v0.3.1.md) | 已發行版本的範圍、相容性及限制 |
+| [v0.3.2 發行說明](docs/releases/v0.3.2.md) | 多語言與維護修補；發行須通過安全檢查、前端與 Rust 測試、Windows 打包、NSIS 與 MSI 各自的安裝生命週期檢查，以及實際更新簽章驗證 |
+| [v0.3.1 發行說明](docs/releases/v0.3.1.md) | 歷史版本的相容性與驗證範圍 |
 | [研究與待辦事項](docs/research/ecosystem.md) | 驗證器生態觀察與後續工作 |
 | [參與貢獻](CONTRIBUTING.md) | 分支、Pull Request 與發行的貢獻流程 |
 | [安全通報](SECURITY.md) | 私下通報漏洞的規則 |

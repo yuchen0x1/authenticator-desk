@@ -30,8 +30,8 @@
   <a href="https://github.com/yuchen0x1/authenticator-desk/issues">Report an issue</a>
 </p>
 
-> **Published release:** [v0.3.1](https://github.com/yuchen0x1/authenticator-desk/releases/tag/v0.3.1), built from the tagged commit `7ae5151e3041487f9e46ac4cec943fbd20553daf`. The installers and verification evidence refer to that published release, not a new build from this documentation change.
-> The release page contains NSIS (`.exe`) and MSI installers, detached update signatures, checksums and `update.json`.
+> **Source version: v0.3.2** · [Release notes](docs/releases/v0.3.2.md)
+> Check the [latest GitHub release](https://github.com/yuchen0x1/authenticator-desk/releases/latest) for publicly available Windows installers. The source version alone does not establish that its installers have been published or that their signatures have been verified.
 
 ## Why AUTHENTICATOR DESK?
 
@@ -170,6 +170,7 @@ Important limits:
 - Encrypted third-party exports are deliberately unsupported; the app does not guess how to decrypt them.
 - The published v0.3.1 installers are **Authenticode `NotSigned`**. Updater/Minisign signatures verify release payload integrity; they are not a Windows publisher certificate.
 - **One dependency security advisory remains open:** `RUSTSEC-2024-0429` affects `glib 0.18.5`, a transitive Linux GTK dependency. It is not in the Windows x64 target dependency graph, but the lockfile advisory remains unresolved and remediation is blocked on upstream. See the [open dependency security advisory](docs/known-limitations.md#open-dependency-security-advisory).
+- A password-rotation test failed once in macOS core CI and did not recur after diagnostics were added. The root cause remains unknown; this is not evidence of a production fix.
 - Windows 11 x64 is the native desktop acceptance target. Linux and macOS CI validate the portable core, not a complete native desktop experience.
 - Windows Hello, camera capture, encrypted third-party backup decryption, cloud sync and password recovery are not currently implemented capabilities. Publisher signing, exclusion from clipboard history and cloud sync, a genuine signed automatic upgrade and rollback from an older version, an old-version MSI upgrade, Windows ACL inspection and full native interaction each require separate acceptance evidence. See the [known limitations](docs/known-limitations.md) and [test report](docs/test-report.md).
 
@@ -210,14 +211,14 @@ For authoritative dependency versions, see `package.json`, `pnpm-lock.yaml`, `sr
 
 ## Download and upgrade
 
-Download the published [v0.3.1](https://github.com/yuchen0x1/authenticator-desk/releases/tag/v0.3.1) from GitHub Releases:
+Download a publicly available Windows x64 installer from the [latest GitHub release](https://github.com/yuchen0x1/authenticator-desk/releases/latest):
 
 - Choose the NSIS (`.exe`) or MSI installer family.
 - Keep the same installer family when upgrading.
 - Verify the checksums in `SHA256SUMS.txt` and, if your workflow supports Minisign, the detached `.sig` files.
 - Back up the vault and fully exit all running clients before installation.
 
-The published release has seven assets: two installers, two detached signatures, `release-assets.json`, `SHA256SUMS.txt` and `update.json`. The [post-publication test report](docs/test-report.md) records independent download verification and an actual manual NSIS upgrade from v0.1.0 to v0.3.1 in an isolated environment. That evidence does **not** establish a Windows publisher certificate, an MSI upgrade from an older version or full acceptance of automatic installation through the updater.
+The [historical test report](docs/test-report.md) records independent verification of the v0.3.1 downloads and a **manual NSIS upgrade** from v0.1.0 to v0.3.1 that reopened the existing vault in an isolated environment. That evidence does not verify v0.3.2 or qualify automatic updater installation or an MSI upgrade from an older version.
 
 ## Development setup
 
@@ -277,7 +278,8 @@ The in-depth documents below are mainly in English. Four interface and README la
 | [Test report](docs/test-report.md) | Dated evidence from local tests, hosted CI, packaging, releases and upgrades |
 | [Maintenance record](docs/maintenance.md) | Platform decisions and release acceptance criteria |
 | [Release history](docs/releases/release-notes.md) | Published and candidate release notes |
-| [v0.3.1 release notes](docs/releases/v0.3.1.md) | Published release scope, compatibility and limits |
+| [v0.3.2 release notes](docs/releases/v0.3.2.md) | Localization and maintenance patch; release gates include security checks, frontend and Rust tests, Windows packaging, separate NSIS and MSI installer lifecycle checks, and verification of real updater signatures |
+| [v0.3.1 release notes](docs/releases/v0.3.1.md) | Historical compatibility and verification limits |
 | [Research and backlog](docs/research/ecosystem.md) | Authenticator ecosystem observations and follow-up work |
 | [Contributing](CONTRIBUTING.md) | Branch, pull request and release contribution workflow |
 | [Security reporting](SECURITY.md) | Rules for private vulnerability reporting |

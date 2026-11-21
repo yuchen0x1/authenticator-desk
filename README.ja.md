@@ -30,8 +30,8 @@
   <a href="https://github.com/yuchen0x1/authenticator-desk/issues">不具合の報告</a>
 </p>
 
-> **公開済みリリース：** [v0.3.1](https://github.com/yuchen0x1/authenticator-desk/releases/tag/v0.3.1)。対象コミットは `7ae5151e3041487f9e46ac4cec943fbd20553daf` です。本文のインストーラーと検証記録はこの公開済みリリースに関するものであり、今回の文書更新で新しくビルドしたものではありません。
-> リリースページでは NSIS（`.exe`）と MSI のインストーラー、分離署名、チェックサム、`update.json` を提供しています。その後のソースや文書の変更が、公開済みインストーラーに反映されているとは限りません。
+> **このソースのバージョン：v0.3.2** · [リリースノート](docs/releases/v0.3.2.md)
+> Windows インストーラーの公開状況は [GitHub の最新リリース](https://github.com/yuchen0x1/authenticator-desk/releases/latest)で確認してください。ソースのバージョン番号だけでは、対応するインストーラーの公開や署名の検証が済んでいることを示せません。
 
 ## AUTHENTICATOR DESK を選ぶ理由
 
@@ -159,6 +159,7 @@ TOTP は端末のシステム時計に依存します。時刻がずれている
 
 - 公開済み v0.3.1 の EXE・MSI は、Windows Authenticode の状態が **`NotSigned`** です。Minisign／updater の署名はリリースファイルの完全性を検証するものであり、Windows の発行元証明書ではありません。
 - **未解決の依存関係の警告が 1 件あります：** Linux GTK 経由の間接依存 `glib 0.18.5` に `RUSTSEC-2024-0429` が該当します。Windows x64 の依存グラフには含まれませんが、ロックファイル内の警告は未修正で、解消は上流の対応待ちです。[未解決の依存関係のセキュリティ勧告](docs/known-limitations.md#open-dependency-security-advisory)を参照してください。
+- macOS のコア CI でパスワード変更のテストが一度失敗しました。診断情報の追加後は再現していませんが、根本原因は未特定であり、製品コードで修正されたことを示すものではありません。
 - Windows Hello、カメラ読み取り、第三者の暗号化バックアップの復号、クラウド同期、パスワード復旧は現在の実装済み機能ではありません。
 - OS やデバッガーがロック解除済みのプロセスを制御している場合、オープンソースであること、暗号化、コードの難読化によって平文の不可視性を保証することはできません。
 - Linux・macOS で検証するのは移植可能なコアです。完全なネイティブデスクトップ対応を示すものではありません。
@@ -203,12 +204,12 @@ flowchart LR
 
 ## ダウンロード、検証、アップグレード
 
-公開済みの [v0.3.1](https://github.com/yuchen0x1/authenticator-desk/releases/tag/v0.3.1) には、インストーラー 2 個、分離署名 2 個、`release-assets.json`、`SHA256SUMS.txt`、`update.json` の計 7 ファイルがあります。
+[GitHub の最新リリース](https://github.com/yuchen0x1/authenticator-desk/releases/latest)から、公開済みの Windows x64 インストーラーをダウンロードしてください。
 
 - NSIS（`.exe`）か MSI を選び、アップグレードでも同じ種類を使います。
 - `SHA256SUMS.txt` のチェックサムを確認し、Minisign を利用できる場合は分離署名の `.sig` も検証します。
 - 保管庫をバックアップし、トレイ内のものも含め、実行中の旧版をすべて終了してからインストールします。
-- [公開後のテスト報告](docs/test-report.md)には、独立したダウンロード検証と、隔離環境で実際に行った v0.1.0 → v0.3.1 の**手動 NSIS アップグレード**および既存保管庫の再オープンの記録があります。これは、Windows 発行元証明書、旧版 MSI の更新、自動 updater によるインストールが検証済みという意味ではありません。
+- [過去のテスト報告](docs/test-report.md)には、v0.3.1 のダウンロードファイルの独立検証と、隔離環境での v0.1.0 → v0.3.1 の**手動 NSIS アップグレード**および既存保管庫の再オープンの記録があります。これは、v0.3.2、自動更新によるインストール、旧版からの MSI アップグレードが検証済みという意味ではありません。
 - 失敗時には元のデータとバックアップを保持し、[更新と復旧のガイド](docs/updating.md)を参照してください。使用中のインスタンスの `.lock` ファイルを削除してはいけません。
 
 ## 開発環境
@@ -269,7 +270,8 @@ cargo check --locked --manifest-path src-tauri/Cargo.toml --features signed-upda
 | [テスト報告](docs/test-report.md) | ローカル、CI、パッケージ化、公開、アップグレードの記録を日付別に整理 |
 | [保守記録](docs/maintenance.md) | プラットフォームの方針とリリースの判定基準 |
 | [リリース履歴](docs/releases/release-notes.md) | 公開版と候補版の変更履歴 |
-| [v0.3.1 のリリースノート](docs/releases/v0.3.1.md) | 公開済みリリースの範囲、互換性、制限 |
+| [v0.3.2 のリリースノート](docs/releases/v0.3.2.md) | 多言語対応と保守のためのパッチ。公開にはセキュリティチェック、フロントエンドと Rust のテスト、Windows パッケージの作成、NSIS と MSI それぞれのインストーラーのライフサイクル検証、実際の更新署名の検証が必要 |
+| [v0.3.1 のリリースノート](docs/releases/v0.3.1.md) | 過去のリリースの互換性と検証範囲 |
 | [調査と今後の作業](docs/research/ecosystem.md) | 認証アプリのエコシステムの調査と課題 |
 | [コントリビューション](CONTRIBUTING.md) | ブランチ、プルリクエスト、リリースへの参加手順 |
 | [脆弱性の報告](SECURITY.md) | 非公開で報告するためのルール |

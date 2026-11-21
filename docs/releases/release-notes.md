@@ -1,5 +1,14 @@
 # AUTHENTICATOR DESK release notes
 
+## v0.3.2
+
+- Remember the authenticated language preference during locked cold starts, including the favorites panel; reject invalid hints and stale saves.
+- Complete favorite-event and native file-filter translations and provide four complete README editions.
+- Update validated native and GitHub Actions dependencies; retain security-update checks.
+- Add safe password-rotation assertion diagnostics without changing production authentication or lease semantics.
+- Vault schema, encryption, backup formats, application identifier and storage paths are unchanged.
+- The Linux GTK `glib` advisory and the unconfirmed intermittent macOS regression remain explicitly disclosed. [Release scope, publication gates and limitations](v0.3.2.md). Published availability is determined by the [GitHub release](https://github.com/yuchen0x1/authenticator-desk/releases/tag/v0.3.2), not by this source entry.
+
 ## v0.3.1 (published 2026-11-21)
 
 Published from tag commit `7ae5151e3041487f9e46ac4cec943fbd20553daf` with seven release assets. See the [GitHub release](https://github.com/yuchen0x1/authenticator-desk/releases/tag/v0.3.1). The installers have updater/minisign signatures but no Windows Authenticode publisher certificate. Later source changes do not replace these immutable release assets.

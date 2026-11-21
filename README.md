@@ -29,8 +29,8 @@
   <a href="https://github.com/yuchen0x1/authenticator-desk/issues">问题反馈</a>
 </p>
 
-> **已发布版本：[v0.3.1](https://github.com/yuchen0x1/authenticator-desk/releases/tag/v0.3.1)**，对应提交 `7ae5151e3041487f9e46ac4cec943fbd20553daf`。
-> 发布页提供 NSIS（`.exe`）、MSI 安装包、更新签名、校验文件和 `update.json`。后续源码与文档改动不等于这些安装包已经更新。
+> **本源码版本：v0.3.2** · [版本说明](docs/releases/v0.3.2.md)
+> Windows 安装包的公开状态以 [GitHub 最新发布页](https://github.com/yuchen0x1/authenticator-desk/releases/latest)为准。源码版本号不代表对应安装包已发布或通过签名验证。
 
 ## 为什么选择 AUTHENTICATOR DESK？
 
@@ -154,6 +154,7 @@ TOTP 依赖本机系统时钟；时间不准确可能导致验证码无法使用
 
 - **仍有 1 项开放依赖告警**：Linux GTK 间接依赖 `glib 0.18.5` 存在 `RUSTSEC-2024-0429`，受当前上游版本约束阻塞。它不在 Windows x64 目标依赖图中，但不能据此把锁文件告警当作已修复；详见[已知限制](docs/known-limitations.md#open-dependency-security-advisory)。
 - v0.3.1 官方 EXE / MSI 的 Windows Authenticode 状态为 **`NotSigned`**。Minisign/updater 签名不等于 Windows 发布者证书。
+- macOS 核心 CI 曾有一次密码轮换测试失败；补充诊断后未复现，根因仍未确认，不能视为生产修复。
 - Windows Hello、摄像头扫码、加密第三方备份解密、云同步、密码恢复均不是当前已实现能力。
 - 操作系统或调试器已控制解锁进程时，开源、加密和代码混淆都不能保证明文不可见。
 - Linux/macOS 当前只验证可移植核心，不宣称完整原生桌面支持。
@@ -198,12 +199,12 @@ flowchart LR
 
 ## 下载、校验与升级
 
-[v0.3.1 发布页](https://github.com/yuchen0x1/authenticator-desk/releases/tag/v0.3.1)包含 7 个资产：两个安装包、两个 `.sig`、`release-assets.json`、`SHA256SUMS.txt` 与 `update.json`。
+从 [GitHub 最新发布页](https://github.com/yuchen0x1/authenticator-desk/releases/latest)下载已公开的 Windows x64 安装包。
 
 - 根据现有安装选择 NSIS `.exe` 或 MSI，升级时保持同一类型。
 - 校验 `SHA256SUMS.txt`；具备 Minisign 验证条件时，进一步核验 detached signatures。
 - 备份保险库，完全退出所有旧版进程，包括托盘实例，再安装。
-- 发布后记录包含隔离环境中真实的 v0.1.0 → v0.3.1 **手动 NSIS 升级**及原保险库重新打开；这不等于自动 updater 安装或旧版 MSI 升级已经通过。
+- [历史测试记录](docs/test-report.md)包含 v0.3.1 下载资产的独立验证，以及在隔离环境中**用 NSIS 手动从 v0.1.0 升级到 v0.3.1** 并重新打开原保险库的记录。这不代表 v0.3.2 已通过验证，也不证明自动更新安装或旧版 MSI 升级通过验收。
 - 失败时保留原数据和备份，参考[更新与恢复指南](docs/updating.md)，不要删除活动实例的 `.lock` 文件。
 
 ## 开发环境
@@ -260,7 +261,8 @@ cargo check --locked --manifest-path src-tauri/Cargo.toml --features signed-upda
 | [测试报告](docs/test-report.md) | 按日期区分本地、CI、打包、发布和升级证据 |
 | [维护记录](docs/maintenance.md) | 平台目标与发布门槛 |
 | [发布历史](docs/releases/release-notes.md) | 历史变更 |
-| [v0.3.1 说明](docs/releases/v0.3.1.md) | 当前发布版本的兼容性与边界 |
+| [v0.3.2 说明](docs/releases/v0.3.2.md) | 多语言与维护补丁；发布须通过安全检查、前端与 Rust 测试、Windows 打包、NSIS 与 MSI 各自的安装生命周期检查及真实更新签名验证 |
+| [v0.3.1 说明](docs/releases/v0.3.1.md) | 历史版本的兼容性与验证边界 |
 | [生态研究](docs/research/ecosystem.md) | 观察与后续工作 |
 | [贡献指南](CONTRIBUTING.md) | 分支、PR 与贡献流程 |
 | [安全报告](SECURITY.md) | 私密漏洞报告要求 |
