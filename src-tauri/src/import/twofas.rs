@@ -14,6 +14,13 @@ use super::{
 /// decryption, and group/order/icon metadata is ignored.
 pub struct TwoFasAdapter;
 
+fn json_nullable_u64(value: Option<&Value>) -> Result<Option<u64>, ()> {
+    match value {
+        None | Some(Value::Null) => Ok(None),
+        Some(value) => value.as_u64().ok_or(()).map(Some),
+    }
+}
+
 fn map_service(service: &Value) -> MigrationItem {
     let name = json_str(service, "name").unwrap_or_default().to_owned();
     let otp = service.get("otp");
@@ -41,8 +48,14 @@ fn map_service(service: &Value) -> MigrationItem {
     if !["SHA1", "SHA256", "SHA512"].contains(&algorithm.as_str()) {
         return invalid("unsupported_algorithm");
     }
-    let digits = otp.and_then(|otp| json_u64(otp, "digits")).unwrap_or(6);
-    let period_secs = otp.and_then(|otp| json_u64(otp, "period")).unwrap_or(30);
+    let (Ok(digits), Ok(period_secs)) = (
+        json_nullable_u64(otp.and_then(|otp| otp.get("digits"))),
+        json_nullable_u64(otp.and_then(|otp| otp.get("period"))),
+    ) else {
+        return invalid("invalid_parameters");
+    };
+    let digits = digits.unwrap_or(6);
+    let period_secs = period_secs.unwrap_or(30);
     let account = otp
         .and_then(|otp| json_str(otp, "account"))
         .filter(|account| !account.is_empty())
@@ -63,8 +76,10 @@ fn map_service(service: &Value) -> MigrationItem {
     input.digits = digits.min(u8::MAX as u64) as u8;
     input.period_secs = period_secs.min(u32::MAX as u64) as u32;
     if token_type == "HOTP" {
-        let Some(counter) = otp.and_then(|otp| json_u64(otp, "counter")) else {
-            return invalid("missing_counter");
+        let counter = match json_nullable_u64(otp.and_then(|otp| otp.get("counter"))) {
+            Ok(Some(counter)) => counter,
+            Ok(None) => return invalid("missing_counter"),
+            Err(()) => return invalid("invalid_parameters"),
         };
         input.hotp_counter = counter.to_string();
     }

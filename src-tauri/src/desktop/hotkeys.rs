@@ -1,7 +1,7 @@
 use super::DesktopConfig;
 use crate::{AppError, AppResult};
 use std::str::FromStr;
-use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 pub fn validate(config: &DesktopConfig) -> AppResult<()> {
     let mut ids = Vec::new();
@@ -17,7 +17,12 @@ pub fn validate(config: &DesktopConfig) -> AppResult<()> {
             return Err(AppError::InvalidInput);
         }
         let shortcut = Shortcut::from_str(text).map_err(|_| AppError::InvalidInput)?;
-        if ids.contains(&shortcut.id()) {
+        // Bare keys and Shift-only combinations would intercept ordinary typing globally.
+        if !shortcut
+            .mods
+            .intersects(Modifiers::CONTROL | Modifiers::ALT | Modifiers::SUPER)
+            || ids.contains(&shortcut.id())
+        {
             return Err(AppError::InvalidInput);
         }
         ids.push(shortcut.id());

@@ -56,6 +56,20 @@ pub fn should_hide_main(config: &DesktopConfig, tray_available: bool, minimized:
         }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MainCloseAction {
+    Hide,
+    Exit,
+}
+
+pub fn main_close_action(config: &DesktopConfig, tray_available: bool) -> MainCloseAction {
+    if should_hide_main(config, tray_available, false) {
+        MainCloseAction::Hide
+    } else {
+        MainCloseAction::Exit
+    }
+}
+
 #[cfg(feature = "desktop")]
 use crate::{AppError, AppResult, AppState};
 #[cfg(feature = "desktop")]
@@ -119,12 +133,88 @@ pub fn setup(app: &mut tauri::App) -> AppResult<()> {
     );
     *state.config.write().map_err(|_| AppError::Storage)? = config;
     *state.capabilities.write().map_err(|_| AppError::Storage)? = capabilities;
+    // The vault is still locked here, so the encrypted settings cannot be read.
+    // Start in the last chosen appearance instead of flashing the default theme.
+    if let Ok(data_dir) = handle.state::<AppState>().data_dir() {
+        let theme = read_theme_hint(&data_dir);
+        apply_theme(handle, theme);
+    }
     Ok(())
 }
 
+/// The window theme drives the title bar and WebView2's native widgets (the
+/// `<select>` popup, default scrollbars). The page's own colors come from CSS
+/// tokens, so this only mirrors the saved preference into the host window.
+#[cfg(all(feature = "desktop", target_os = "windows"))]
+pub fn apply_theme(app: &tauri::AppHandle, theme: &str) {
+    let theme = if theme == "light" {
+        tauri::Theme::Light
+    } else {
+        tauri::Theme::Dark
+    };
+    for window in app.webview_windows().values() {
+        let _ = window.set_theme(Some(theme));
+    }
+}
+
+#[cfg(all(feature = "desktop", not(target_os = "windows")))]
+pub fn apply_theme(_app: &tauri::AppHandle, _theme: &str) {}
+
+/// The appearance choice lives inside the encrypted settings, which cannot be read
+/// while the vault is locked. This tiny non-secret hint file keeps the locked
+/// window and its title bar in the appearance the user last chose. It holds one of
+/// two words and no account data, so the plaintext scan (which matches known
+/// secrets) never flags it.
+pub const THEME_HINT_FILE: &str = "ui.json";
+
+pub fn normalize_theme(theme: &str) -> &'static str {
+    if theme == "light" {
+        "light"
+    } else {
+        "dark"
+    }
+}
+
+pub fn save_theme_hint(data_dir: &std::path::Path, theme: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    let body = format!("{{\"theme\":\"{}\"}}\n", normalize_theme(theme));
+    let temporary = data_dir.join(format!(".ui-{}.tmp", uuid::Uuid::new_v4()));
+    let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&temporary)?;
+    let result = (|| {
+        file.write_all(body.as_bytes())?;
+        file.sync_all()?;
+        drop(file);
+        // Replace the directory entry rather than following an existing link.
+        std::fs::rename(&temporary, data_dir.join(THEME_HINT_FILE))
+    })();
+    if result.is_err() { let _ = std::fs::remove_file(temporary); }
+    result
+}
+
+pub fn read_theme_hint(data_dir: &std::path::Path) -> &'static str {
+    #[derive(serde::Deserialize)]
+    struct Hint {
+        theme: String,
+    }
+    use std::io::Read;
+    let read = || -> std::io::Result<Vec<u8>> {
+        let path = data_dir.join(THEME_HINT_FILE);
+        if !std::fs::symlink_metadata(&path)?.file_type().is_file() {
+            return Ok(Vec::new());
+        }
+        let mut bytes = Vec::new();
+        std::fs::File::open(path)?.take(65).read_to_end(&mut bytes)?;
+        Ok(bytes)
+    };
+    read().ok()
+        .filter(|bytes| bytes.len() <= 64)
+        .and_then(|bytes| serde_json::from_slice::<Hint>(&bytes).ok())
+        .map(|hint| normalize_theme(&hint.theme))
+        .unwrap_or("dark")
+}
+
 #[cfg(feature = "desktop")]
-pub fn show_main(app: &tauri::AppHandle) -> AppResult<()> {
-    let window = app.get_webview_window("main").ok_or(AppError::NotFound)?;
+pub fn show_main(app: &tauri::AppHandle) -> AppResult<()> {    let window = app.get_webview_window("main").ok_or(AppError::NotFound)?;
     window.unminimize().map_err(|_| AppError::Storage)?;
     window.show().map_err(|_| AppError::Storage)?;
     window.set_focus().map_err(|_| AppError::Storage)
@@ -167,6 +257,17 @@ pub fn lock(app: &tauri::AppHandle) -> AppResult<()> {
 }
 
 #[cfg(feature = "desktop")]
+pub fn quit(app: &tauri::AppHandle) {
+    if lock(app).is_err() {
+        // Attempt both cleanups even if an earlier AppState::lock step failed.
+        let state = app.state::<AppState>();
+        let _ = state.vault.lock_vault();
+        let _ = state.clipboard.clear_owned();
+    }
+    app.exit(0);
+}
+
+#[cfg(feature = "desktop")]
 pub fn handle_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
     if window.label() == "quick-panel" {
         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -179,23 +280,70 @@ pub fn handle_window_event(window: &tauri::Window, event: &tauri::WindowEvent) {
         return;
     }
     let app = window.app_handle();
-    let state = app.state::<DesktopState>();
-    let (Ok(config), Ok(caps)) = (state.config.read(), state.capabilities.read()) else {
-        return;
+    let (close_action, hide_on_minimize) = {
+        let state = app.state::<DesktopState>();
+        match (state.config.read(), state.capabilities.read()) {
+            (Ok(config), Ok(caps)) => (
+                main_close_action(&config, caps.tray),
+                should_hide_main(&config, caps.tray, true),
+            ),
+            _ => (MainCloseAction::Exit, false),
+        }
     };
     match event {
-        tauri::WindowEvent::CloseRequested { api, .. }
-            if should_hide_main(&config, caps.tray, false) =>
-        {
+        tauri::WindowEvent::CloseRequested { api, .. } => {
             api.prevent_close();
-            let _ = window.hide();
+            match close_action {
+                MainCloseAction::Hide => {
+                    let _ = window.hide();
+                }
+                // Closing only the main window leaves an existing hidden quick panel alive.
+                MainCloseAction::Exit => quit(app),
+            }
         }
         tauri::WindowEvent::Resized(_)
-            if window.is_minimized().unwrap_or(false)
-                && should_hide_main(&config, caps.tray, true) =>
+            if window.is_minimized().unwrap_or(false) && hide_on_minimize =>
         {
             let _ = window.hide();
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod theme_hint_tests {
+    use super::{read_theme_hint, save_theme_hint, THEME_HINT_FILE};
+
+    fn temp_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "authdesk-theme-hint-{name}-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn round_trips_both_appearances() {
+        let dir = temp_dir("round-trip");
+        assert_eq!(read_theme_hint(&dir), "dark");
+        save_theme_hint(&dir, "light").unwrap();
+        assert_eq!(read_theme_hint(&dir), "light");
+        save_theme_hint(&dir, "dark").unwrap();
+        assert_eq!(read_theme_hint(&dir), "dark");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rejects_unknown_and_oversized_content() {
+        let dir = temp_dir("reject");
+        std::fs::write(dir.join(THEME_HINT_FILE), "{\"theme\":\"sepia\"}").unwrap();
+        assert_eq!(read_theme_hint(&dir), "dark");
+        save_theme_hint(&dir, "sepia").unwrap();
+        assert_eq!(read_theme_hint(&dir), "dark");
+        std::fs::write(dir.join(THEME_HINT_FILE), "x".repeat(4096)).unwrap();
+        assert_eq!(read_theme_hint(&dir), "dark");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -27,6 +27,7 @@ dependencies = [
  "cipher",
  "cpubits",
  "cpufeatures 0.3.1",
+ "zeroize",
 ]
 
 [[package]]
@@ -41,6 +42,7 @@ dependencies = [
  "ctr",
  "ctutils",
  "ghash",
+ "zeroize",
 ]
 
 [[package]]
@@ -92,6 +94,7 @@ dependencies = [
  "blake2",
  "cpufeatures 0.3.1",
  "password-hash",
+ "zeroize",
 ]
 
 [[package]]
@@ -256,7 +259,7 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "authenticator-desk"
-version = "0.2.0"
+version = "0.3.1"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -1610,6 +1613,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2eecf2d5dc9b66b732b97707a0210906b1d30523eb773193ab777c0c84b3e8d5"
 dependencies = [
  "polyval",
+ "zeroize",
 ]
 
 [[package]]
@@ -3303,6 +3307,7 @@ dependencies = [
  "cpubits",
  "cpufeatures 0.3.1",
  "universal-hash",
+ "zeroize",
 ]
 
 [[package]]

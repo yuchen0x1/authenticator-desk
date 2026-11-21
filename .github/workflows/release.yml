@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-promotion
   cancel-in-progress: false
 
 jobs:
@@ -22,14 +22,20 @@ jobs:
           persist-credentials: false
       - name: Validate tag and main ancestry
         run: |
+          node scripts/release.mjs context
           git merge-base --is-ancestor HEAD origin/main
           node scripts/release.mjs version "$GITHUB_REF_NAME"
 
-  verify:
+  security:
     needs: tag
+    uses: ./.github/workflows/security.yml
+
+  verify:
+    needs: [tag, security]
     uses: ./.github/workflows/ci.yml
     with:
       signed: true
+    secrets: inherit
 
   publish:
     needs: verify
@@ -47,6 +53,8 @@ jobs:
           name: windows-x64
           path: release-assets
       - name: Verify release bundle
+        env:
+          AUTHDESK_VERIFY_PUBLIC_KEY: ${{ vars.AUTHDESK_UPDATER_PUBLIC_KEY }}
         run: node scripts/release.mjs verify release-assets "$GITHUB_REF_NAME" signed
       - name: Select release notes
         id: notes
@@ -55,7 +63,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           NOTES_PATH: ${{ steps.notes.outputs.path }}
+          AUTHDESK_VERIFY_PUBLIC_KEY: ${{ vars.AUTHDESK_UPDATER_PUBLIC_KEY }}
         run: |
+          node scripts/release.mjs context
+          if [[ "$GITHUB_REF_NAME" != *-rc.* ]]; then
+            stable_tags=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name')
+            node scripts/release.mjs promotion "$stable_tags"
+          fi
           if gh release view "$GITHUB_REF_NAME" --json id >/dev/null 2>&1; then
             echo "::error::A release or draft already exists for this tag. Inspect it before resuming."
             exit 1
@@ -64,8 +78,14 @@ jobs:
           if [[ -n "$NOTES_PATH" ]]; then notes=(--notes-file "$NOTES_PATH"); fi
           status=(--latest)
           if [[ "$GITHUB_REF_NAME" == *-rc.* ]]; then status=(--prerelease --latest=false); fi
-          gh release create "$GITHUB_REF_NAME" --verify-tag --draft --title "$GITHUB_REF_NAME" "${notes[@]}" "${status[@]}" release-assets/*
+          gh release create "$GITHUB_REF_NAME" --verify-tag --target "$GITHUB_SHA" --draft --title "$GITHUB_REF_NAME" "${notes[@]}" "${status[@]}" release-assets/*
           gh release download "$GITHUB_REF_NAME" --dir verified-download
           node scripts/release.mjs verify verified-download "$GITHUB_REF_NAME" signed
           gh release edit "$GITHUB_REF_NAME" --draft=false "${status[@]}"
           gh release view "$GITHUB_REF_NAME" --json isDraft,isPrerelease,url,assets
+          gh release download "$GITHUB_REF_NAME" --dir published-download
+          node scripts/release.mjs verify published-download "$GITHUB_REF_NAME" signed
+          if [[ "$GITHUB_REF_NAME" != *-rc.* ]]; then
+            curl --fail --location --retry 3 --max-time 180 "https://github.com/$GITHUB_REPOSITORY/releases/latest/download/update.json" --output latest-update.json
+            cmp latest-update.json published-download/update.json
+          fi

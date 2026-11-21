@@ -16,6 +16,7 @@ export default defineConfig({
     sourcemap: Boolean(process.env.TAURI_ENV_DEBUG),
   },
   test: {
+    include: ["src/**/*.{test,spec}.{ts,tsx}"],
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     css: true,
