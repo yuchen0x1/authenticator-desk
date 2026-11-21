@@ -1,0 +1,148 @@
+import type { Locale } from "./index";
+
+const messages = {
+  en: {
+    retry: "Retry", unavailable: "Unavailable", working: "Working…", saving: "Saving…",
+    activityHint: "Recent operations recorded by this local vault.",
+    activityLoadError: "Activity could not be loaded.",
+    categoriesHint: "Organize accounts with names and colors.",
+    categoryName: "Category name", categoryColor: "Category color", categoryAdd: "Add category",
+    categoryEdit: "Edit category", categoryDelete: "Delete category", categoriesEmpty: "No categories yet.",
+    categorySaveError: "The category could not be saved. Your changes are still in the form.",
+    categoryDeleteError: "The category could not be deleted.",
+    categoryRefreshError: "The change was saved, but the category list could not be refreshed. Retry refreshing the list.",
+    dashboardLoadError: "Overview statistics could not be loaded. Your local accounts are still available below.",
+    copiesToday: "Copies today", openCodes: "View codes", openSecurity: "Open security center",
+    securitySummaryHint: "Open the security center to inspect vault integrity and backup status.",
+    auditLoadError: "The security audit could not be loaded.",
+    auditRefreshError: "The audit could not be refreshed. The values below are from the last successful check.",
+    lastSuccessfulCheck: "Last successful check",
+    autoLoadError: "Automatic backup settings could not be loaded.",
+  },
+  "zh-CN": {
+    retry: "重试", unavailable: "不可用", working: "正在处理…", saving: "正在保存…",
+    activityHint: "当前本机保险库记录的近期操作。",
+    activityLoadError: "无法读取活动记录。",
+    categoriesHint: "使用名称与颜色整理账户。",
+    categoryName: "分类名称", categoryColor: "分类颜色", categoryAdd: "添加分类",
+    categoryEdit: "编辑分类", categoryDelete: "删除分类", categoriesEmpty: "暂无分类。",
+    categorySaveError: "无法保存分类。所做修改仍保留在表单中。",
+    categoryDeleteError: "无法删除分类。",
+    categoryRefreshError: "更改已保存，但无法刷新分类列表。请重试刷新列表。",
+    dashboardLoadError: "无法读取概览统计。下方仍可访问本机账户。",
+    copiesToday: "今日复制次数", openCodes: "查看验证码", openSecurity: "打开安全中心",
+    securitySummaryHint: "前往安全中心检查保险库完整性及备份状态。",
+    auditLoadError: "无法读取安全检查结果。",
+    auditRefreshError: "无法刷新安全检查。下方显示的是上次成功检查的结果。",
+    lastSuccessfulCheck: "上次成功检查",
+    autoLoadError: "无法读取自动备份设置。",
+  },
+  "zh-TW": {
+    retry: "重試", unavailable: "無法使用", working: "正在處理…", saving: "正在儲存…",
+    activityHint: "目前本機保險庫記錄的近期操作。",
+    activityLoadError: "無法讀取活動記錄。",
+    categoriesHint: "使用名稱與顏色整理帳戶。",
+    categoryName: "分類名稱", categoryColor: "分類顏色", categoryAdd: "新增分類",
+    categoryEdit: "編輯分類", categoryDelete: "刪除分類", categoriesEmpty: "暫無分類。",
+    categorySaveError: "無法儲存分類。所做修改仍保留在表單中。",
+    categoryDeleteError: "無法刪除分類。",
+    categoryRefreshError: "變更已儲存，但無法重新整理分類清單。請重試重新整理清單。",
+    dashboardLoadError: "無法讀取概覽統計。下方仍可存取本機帳戶。",
+    copiesToday: "今日複製次數", openCodes: "檢視驗證碼", openSecurity: "開啟安全中心",
+    securitySummaryHint: "前往安全中心檢查保險庫完整性及備份狀態。",
+    auditLoadError: "無法讀取安全檢查結果。",
+    auditRefreshError: "無法重新整理安全檢查。下方顯示的是上次成功檢查的結果。",
+    lastSuccessfulCheck: "上次成功檢查",
+    autoLoadError: "無法讀取自動備份設定。",
+  },
+  ja: {
+    retry: "再試行", unavailable: "利用不可", working: "処理中…", saving: "保存中…",
+    activityHint: "このローカル保管庫に記録された最近の操作。",
+    activityLoadError: "操作履歴を読み込めませんでした。",
+    categoriesHint: "名前と色でアカウントを整理します。",
+    categoryName: "カテゴリ名", categoryColor: "カテゴリの色", categoryAdd: "カテゴリを追加",
+    categoryEdit: "カテゴリを編集", categoryDelete: "カテゴリを削除", categoriesEmpty: "カテゴリはまだありません。",
+    categorySaveError: "カテゴリを保存できませんでした。変更内容はフォームに残っています。",
+    categoryDeleteError: "カテゴリを削除できませんでした。",
+    categoryRefreshError: "変更は保存されましたが、カテゴリ一覧を更新できませんでした。一覧の更新を再試行してください。",
+    dashboardLoadError: "概要の統計を読み込めませんでした。以下のローカルアカウントは引き続き利用できます。",
+    copiesToday: "今日のコピー回数", openCodes: "認証コードを表示", openSecurity: "セキュリティセンターを開く",
+    securitySummaryHint: "セキュリティセンターで保管庫の整合性とバックアップ状態を確認できます。",
+    auditLoadError: "セキュリティ監査を読み込めませんでした。",
+    auditRefreshError: "監査を更新できませんでした。以下は前回成功した確認の結果です。",
+    lastSuccessfulCheck: "前回成功した確認",
+    autoLoadError: "自動バックアップ設定を読み込めませんでした。",
+  },
+} satisfies Record<Locale, Record<string, string>>;
+
+export function workspaceMessages(locale: Locale) {
+  return messages[locale] ?? messages["zh-CN"];
+}
+
+// Every value the backend writes to `audit_events.event_type`.
+const activityLabels = {
+  en: {
+    account_created: "Account added",
+    account_deleted: "Account deleted",
+    account_updated: "Account updated",
+    accounts_imported: "Accounts imported",
+    accounts_moved: "Accounts moved to a category",
+    accounts_reordered: "Account order changed",
+    backup_restored: "Backup restored",
+    category_deleted: "Category deleted",
+    category_saved: "Category saved",
+    code_copied: "Code copied",
+    hotp_advanced: "Counter advanced",
+    settings_saved: "Settings saved",
+  },
+  "zh-CN": {
+    account_created: "已添加账户",
+    account_deleted: "已删除账户",
+    account_updated: "已更新账户",
+    accounts_imported: "已导入账户",
+    accounts_moved: "已将账户移到分类",
+    accounts_reordered: "已调整账户顺序",
+    backup_restored: "已恢复备份",
+    category_deleted: "已删除分类",
+    category_saved: "已保存分类",
+    code_copied: "已复制验证码",
+    hotp_advanced: "已推进计数器",
+    settings_saved: "已保存设置",
+  },
+  "zh-TW": {
+    account_created: "已新增帳戶",
+    account_deleted: "已刪除帳戶",
+    account_updated: "已更新帳戶",
+    accounts_imported: "已匯入帳戶",
+    accounts_moved: "已將帳戶移至分類",
+    accounts_reordered: "已調整帳戶順序",
+    backup_restored: "已還原備份",
+    category_deleted: "已刪除分類",
+    category_saved: "已儲存分類",
+    code_copied: "已複製驗證碼",
+    hotp_advanced: "已推進計數器",
+    settings_saved: "已儲存設定",
+  },
+  ja: {
+    account_created: "アカウントを追加",
+    account_deleted: "アカウントを削除",
+    account_updated: "アカウントを更新",
+    accounts_imported: "アカウントをインポート",
+    accounts_moved: "アカウントをカテゴリへ移動",
+    accounts_reordered: "アカウントの順序を変更",
+    backup_restored: "バックアップを復元",
+    category_deleted: "カテゴリを削除",
+    category_saved: "カテゴリを保存",
+    code_copied: "コードをコピー",
+    hotp_advanced: "カウンターを進めた",
+    settings_saved: "設定を保存",
+  },
+} satisfies Record<Locale, Record<string, string>>;
+
+// Audit codes stay machine-readable in the database, so the UI maps the known
+// ones to the active locale and keeps the raw code (as the row title, and as the
+// fallback) for anything a newer build may write.
+export function activityLabel(locale: Locale, eventType: string) {
+  const labels: Record<string, string> = activityLabels[locale] ?? activityLabels["zh-CN"];
+  return labels[eventType] ?? eventType;
+}

@@ -7,6 +7,7 @@ on:
   schedule:
     - cron: "24 2 * * 2"
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -36,14 +37,15 @@ jobs:
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 24
+          node-version: 26.13.1
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
       - name: Audit production dependencies
         run: pnpm audit --prod --registry=https://registry.npmjs.org --audit-level high
       - name: Audit development dependencies
         shell: bash
         run: |
-          pnpm audit --registry=https://registry.npmjs.org --json > pnpm-audit.json || node scripts/verify-pnpm-audit.mjs pnpm-audit.json
-      - run: rustup update stable --no-self-update
-      - run: cargo +stable install cargo-audit --locked
-      - run: cargo +stable audit --file src-tauri/Cargo.lock --no-yanked --target-os windows --target-arch x86_64
+          pnpm audit --registry=https://registry.npmjs.org --json > pnpm-audit.json
+          node scripts/verify-pnpm-audit.mjs pnpm-audit.json
+      - run: rustup toolchain install 1.99.1 --profile minimal --no-self-update
+      - run: cargo +1.99.1 install cargo-audit --version 0.23.0 --locked
+      - run: cargo +1.99.1 audit --file src-tauri/Cargo.lock --no-yanked --target-os windows --target-arch x86_64

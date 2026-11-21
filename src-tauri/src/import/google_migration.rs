@@ -1,12 +1,8 @@
 use zeroize::Zeroizing;
 
-use crate::{
-    AppError, AppResult,
-    accounts::AccountInput,
-    otp::encode_base32,
-};
+use crate::{AppError, AppResult, accounts::AccountInput, otp::encode_base32};
 
-use super::{MigrationItem, MigrationPreview, base64::decode_base64};
+use super::{MAX_IMPORT_ITEMS, MigrationItem, MigrationPreview, base64::decode_base64};
 
 const URI_PREFIX: &str = "otpauth-migration://offline?";
 const MAX_URIS: usize = 1000;
@@ -55,7 +51,10 @@ impl<'a> Reader<'a> {
     }
     fn len_delimited(&mut self) -> AppResult<&'a [u8]> {
         let len = self.varint()?;
-        let end = self.pos.checked_add(len as usize).ok_or(AppError::InvalidInput)?;
+        let end = self
+            .pos
+            .checked_add(len as usize)
+            .ok_or(AppError::InvalidInput)?;
         if end > self.data.len() {
             return Err(AppError::InvalidInput);
         }
@@ -323,6 +322,12 @@ impl GoogleMigrationAdapter {
         let mut items = Vec::new();
         for line in &lines {
             items.append(&mut decode_uri(line)?);
+            // A single URI is bounded by MAX_PARAMETERS, but a multi-URI
+            // migration must also respect the import-wide aggregate bound
+            // before any vault classification work begins.
+            if items.len() > MAX_IMPORT_ITEMS {
+                return Err(AppError::InvalidInput);
+            }
         }
         if items.is_empty() {
             return Err(AppError::InvalidInput);
@@ -341,7 +346,11 @@ impl super::MigrationAdapter for GoogleMigrationAdapter {
     fn detect(&self, bytes: &[u8]) -> bool {
         GoogleMigrationAdapter::detect(self, bytes)
     }
-    fn preview(&self, bytes: &[u8], _password: Option<&crate::vault::SecretString>) -> AppResult<MigrationPreview> {
+    fn preview(
+        &self,
+        bytes: &[u8],
+        _password: Option<&crate::vault::SecretString>,
+    ) -> AppResult<MigrationPreview> {
         GoogleMigrationAdapter::preview(self, bytes)
     }
 }
@@ -435,7 +444,8 @@ mod tests {
         payload.extend(field_header(4, 0));
         payload.extend(varint(0));
         let encoded = {
-            const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+            const ALPHABET: &[u8] =
+                b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
             let mut out = String::new();
             let mut buffer = 0u32;
             let mut bits = 0;

@@ -50,7 +50,6 @@ pub struct ClockSample {
 pub struct MonotonicClock {
     last_wall_seconds: Option<i64>,
     last_monotonic_nanos: Option<u128>,
-    offset_secs: i64,
     monotonic_origin: std::time::Instant,
 }
 
@@ -59,7 +58,6 @@ impl Default for MonotonicClock {
         Self {
             last_wall_seconds: None,
             last_monotonic_nanos: None,
-            offset_secs: 0,
             monotonic_origin: std::time::Instant::now(),
         }
     }
@@ -76,7 +74,7 @@ impl MonotonicClock {
             self.last_monotonic_nanos = Some(monotonic_nanos);
             return ClockSample {
                 unix_seconds: wall_seconds,
-                clock_offset_secs: self.offset_secs,
+                clock_offset_secs: 0,
                 wall_clock_jump: false,
             };
         };
@@ -86,22 +84,13 @@ impl MonotonicClock {
         let expected_wall = i128::from(previous_wall) + monotonic_delta;
         let wall_delta = i128::from(wall_seconds) - expected_wall;
         let jumped = wall_delta.unsigned_abs() > 5;
-        if jumped {
-            self.offset_secs =
-                self.offset_secs
-                    .saturating_add(i64::try_from(wall_delta).unwrap_or_else(|_| {
-                        if wall_delta.is_negative() {
-                            i64::MIN
-                        } else {
-                            i64::MAX
-                        }
-                    }));
-        }
         self.last_wall_seconds = Some(wall_seconds);
         self.last_monotonic_nanos = Some(monotonic_nanos);
+        // Monotonic time detects jumps, but cannot determine the correct UTC time.
+        // Follow system UTC so an OS time correction also corrects RFC 6238 codes.
         ClockSample {
-            unix_seconds: wall_seconds.saturating_sub(self.offset_secs),
-            clock_offset_secs: self.offset_secs,
+            unix_seconds: wall_seconds,
+            clock_offset_secs: 0,
             wall_clock_jump: jumped,
         }
     }
@@ -149,17 +138,47 @@ mod tests {
     }
 
     #[test]
-    fn detects_and_compensates_wall_clock_jumps() {
+    fn forward_wall_clock_correction_updates_codes_instead_of_preserving_drift() {
         let mut clock = MonotonicClock::new();
-        assert!(!clock.sample(100, 0).wall_clock_jump);
-        assert!(!clock.sample(101, 1_000_000_000).wall_clock_jump);
-        let jumped = clock.sample(120, 2_000_000_000);
+        assert!(!clock.sample(60, 0).wall_clock_jump);
+        let jumped = clock.sample(181, 1_000_000_000);
         assert!(jumped.wall_clock_jump);
-        assert_eq!(jumped.unix_seconds, 102);
-        assert_eq!(jumped.clock_offset_secs, 18);
-        let resumed = clock.sample(121, 3_000_000_000);
+        assert_eq!(jumped.unix_seconds, 181);
+        assert_eq!(jumped.clock_offset_secs, 0);
+        let resumed = clock.sample(182, 2_000_000_000);
         assert!(!resumed.wall_clock_jump);
-        assert_eq!(resumed.unix_seconds, 103);
+        assert_eq!(resumed.unix_seconds, 182);
+        assert_eq!(resumed.clock_offset_secs, 0);
+        assert_eq!(
+            clock.time_state(30, 0, 183, 3_000_000_000).unwrap(),
+            time_state(183, 30, 0).unwrap()
+        );
+    }
+
+    #[test]
+    fn backward_wall_clock_correction_does_not_leave_a_persistent_offset() {
+        let mut clock = MonotonicClock::new();
+        clock.sample(181, 0);
+        let corrected = clock.sample(60, 1_000_000_000);
+        assert!(corrected.wall_clock_jump);
+        assert_eq!(corrected.unix_seconds, 60);
+        assert_eq!(corrected.clock_offset_secs, 0);
+        let resumed = clock.sample(61, 2_000_000_000);
+        assert!(!resumed.wall_clock_jump);
+        assert_eq!(resumed.unix_seconds, 61);
+        assert_eq!(resumed.clock_offset_secs, 0);
+    }
+
+    #[test]
+    fn resume_uses_current_utc_whether_the_monotonic_clock_includes_sleep_or_not() {
+        for monotonic_nanos in [1_000_000_000, 3_600_000_000_000] {
+            let mut clock = MonotonicClock::new();
+            clock.sample(60, 0);
+            let resumed = clock.sample(3660, monotonic_nanos);
+            assert_eq!(resumed.unix_seconds, 3660);
+            assert_eq!(resumed.clock_offset_secs, 0);
+            assert_eq!(resumed.wall_clock_jump, monotonic_nanos == 1_000_000_000);
+        }
     }
 
     #[test]

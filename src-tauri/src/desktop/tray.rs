@@ -33,10 +33,7 @@ pub fn install(app: &tauri::AppHandle) -> AppResult<()> {
             "lock" => {
                 let _ = super::lock(app);
             }
-            "quit" => {
-                let _ = super::lock(app);
-                app.exit(0);
-            }
+            "quit" => super::quit(app),
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
