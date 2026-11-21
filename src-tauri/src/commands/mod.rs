@@ -5,6 +5,9 @@ use std::path::{Path, PathBuf};
 #[cfg(feature = "desktop")]
 use tauri::Emitter;
 
+#[cfg(any(feature = "desktop", test))]
+pub(crate) mod dialog_labels;
+
 #[allow(dead_code)]
 pub(crate) fn resolve_vault_path(app_data_dir: &Path) -> PathBuf {
     app_data_dir.join("vault.sqlite3")
@@ -333,11 +336,10 @@ pub fn pick_import_file(
     if state.vault.is_locked() {
         return Err(crate::AppError::VaultLocked);
     }
+    let settings = state.accounts.settings()?;
+    let labels = dialog_labels::for_locale(&settings.locale);
     let Some(path) = rfd::FileDialog::new()
-        .add_filter(
-            "Authenticator export",
-            &["json", "txt", "xml", "aes", "bin", "csv"],
-        )
+        .add_filter(labels.import, &["json", "txt", "xml", "aes", "bin", "csv"])
         .pick_file()
     else {
         return Ok(None);
@@ -375,8 +377,10 @@ pub fn backup_create(
     state: tauri::State<'_, AppState>,
     password: String,
 ) -> AppResult<Option<crate::backup::Summary>> {
+    let settings = state.accounts.settings()?;
+    let labels = dialog_labels::for_locale(&settings.locale);
     let Some(path) = rfd::FileDialog::new()
-        .add_filter("AUTHENTICATOR DESK backup", &["authdesk"])
+        .add_filter(labels.backup, &["authdesk"])
         .set_file_name("authenticator-backup.authdesk")
         .save_file()
     else {
@@ -395,8 +399,10 @@ pub fn backup_preview_restore(
     password: String,
     mode: crate::backup::RestoreMode,
 ) -> AppResult<Option<crate::backup::RestorePreview>> {
+    let settings = state.accounts.settings()?;
+    let labels = dialog_labels::for_locale(&settings.locale);
     let Some(path) = rfd::FileDialog::new()
-        .add_filter("AUTHENTICATOR DESK backup", &["authdesk"])
+        .add_filter(labels.backup, &["authdesk"])
         .pick_file()
     else {
         return Ok(None);

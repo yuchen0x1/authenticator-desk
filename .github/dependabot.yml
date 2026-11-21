@@ -12,7 +12,16 @@ updates:
     directory: /src-tauri
     schedule:
       interval: weekly
+    groups:
+      rust-compatible:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    groups:
+      workflow-actions:
+        applies-to: version-updates
+        patterns: ["*"]

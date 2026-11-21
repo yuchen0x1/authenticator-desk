@@ -40,6 +40,7 @@ const code = (value="654321",generatedAt=Math.floor(Date.now()/1000)) => ({
 });
 function deferred<T>() { let resolve!: (value:T)=>void; const promise=new Promise<T>((done)=>{resolve=done;});return {promise,resolve}; }
 beforeEach(() => {
+  localStorage.clear();
   state.locked = true; state.hideCodes = false; state.generation = 1; state.revision = 1; state.handlers.clear();
   state.status.mockReset().mockImplementation(async () => ({exists:true,locked:state.locked,generation:state.generation,revision:state.revision}));
   state.quickPanelAccounts.mockReset().mockImplementation(async () => { if(state.locked)throw {code:"vault_locked"};return [account]; });
@@ -91,6 +92,20 @@ describe("favorite quick panel lock and visibility lifecycle", () => {
     expect(await screen.findByText("Favorites")).toBeVisible();
     expect(await screen.findByText("654321")).toBeVisible();
     expect(document.documentElement.lang).toBe("en");
+  });
+
+  it("starts with the cached language while locked and applies authenticated settings after unlock", async () => {
+    localStorage.setItem("authdesk.locale","ja");
+    render(<QuickPanel />);
+    expect(await screen.findByText("お気に入り")).toBeVisible();
+    expect(document.documentElement.lang).toBe("ja");
+    expect(state.settings).not.toHaveBeenCalled();
+    state.locked=false;
+    state.settings.mockResolvedValue({locale:"en",hide_codes:false});
+    act(()=>window.dispatchEvent(new Event("focus")));
+    expect(await screen.findByText("Favorites")).toBeVisible();
+    expect(document.documentElement.lang).toBe("en");
+    expect(localStorage.getItem("authdesk.locale")).toBe("en");
   });
 
   it("publishes the saved light theme in the standalone document and follows saved changes", async () => {

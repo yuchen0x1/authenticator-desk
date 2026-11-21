@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getMessages, type Locale } from "./i18n";
 import { errorMessage } from "./i18n/errors";
 import { accountCommands, activityCommands, categoryCommands, settingsCommands, tauriInvoke, vaultCommands } from "./lib/tauri";
-import { cacheTheme, readCachedTheme } from "./lib/uiPrefs";
+import { cacheLocale, cacheTheme, isSupportedLocale, readCachedLocale, readCachedTheme } from "./lib/uiPrefs";
 import type { AccountInput, AccountView, AppSettings, AppSnapshot, CategoryView, CodeView } from "./lib/types";
 import { AccountDialog } from "./components/accounts/AccountDialog";
 import { AccountsPage } from "./pages/AccountsPage";
@@ -24,8 +24,8 @@ type WorkspaceState = "loading" | "ready" | "recovery" | "error" | "unavailable"
 export default function App() {
   const [snapshot,setSnapshot] = useState<AppSnapshot|null>(null);
   const [workspace,setWorkspace] = useState<WorkspaceState>("loading");
-  const [locale,setLocale] = useState<Locale>("zh-CN");
-  const [settings,setSettings] = useState<AppSettings>(()=>({ ...defaultSettings, theme: readCachedTheme() }));
+  const [locale,setLocale] = useState<Locale>(readCachedLocale);
+  const [settings,setSettings] = useState<AppSettings>(()=>({ ...defaultSettings, locale: readCachedLocale(), theme: readCachedTheme() }));
   const [accounts,setAccounts] = useState<AccountView[]>([]);
   const [categories,setCategories] = useState<CategoryView[]>([]);
   const [codes,setCodes] = useState<CodeView[]>([]);
@@ -56,9 +56,10 @@ export default function App() {
     settingsRef.current=value;
     codesBlocked.current=value.hide_codes;
     setSettings(value);
-    setLocale(value.locale as Locale);
-    // Remember the appearance for the next locked launch and first paint.
+    setLocale(isSupportedLocale(value.locale) ? value.locale : "zh-CN");
+    // Remember only non-sensitive authenticated preferences for the next locked launch.
     cacheTheme(value.theme);
+    cacheLocale(value.locale);
   },[]);
   const clearSensitive=useCallback(()=>{
     generation.current++;
@@ -94,7 +95,7 @@ export default function App() {
       const value=await tauriInvoke<AppSnapshot>("app_snapshot");
       if(!current())return;
       receivedSnapshot=true;
-      snapshotRef.current=value; setSnapshot(value); setLocale(value.locale as Locale);
+      snapshotRef.current=value; setSnapshot(value);
       if(value.locked){clearSensitive();return;}
       const valueSettings=await settingsCommands.get();
       if(!current())return;

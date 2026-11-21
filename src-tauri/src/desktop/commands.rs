@@ -79,7 +79,8 @@ pub fn pick_qr_image(
     if state.vault.is_locked() {
         return Err(AppError::VaultLocked);
     }
-    let Some(values) = crate::qr::pick_qr_image()? else {
+    let settings = state.accounts.settings()?;
+    let Some(values) = crate::qr::pick_qr_image(&settings.locale)? else {
         return Ok(None);
     };
     state.imports.preview_import(values.join("\n")).map(Some)

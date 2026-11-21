@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { accountCommands, desktopCommands, settingsCommands, vaultCommands } from "../../lib/tauri";
-import { readCachedTheme } from "../../lib/uiPrefs";
+import { cacheLocale, isSupportedLocale, readCachedLocale, readCachedTheme } from "../../lib/uiPrefs";
 import type { AccountView, CodeView } from "../../lib/types";
-import { getMessages } from "../../i18n";
+import { getMessages, type Locale } from "../../i18n";
 import { futureT0Message, isFutureTotp } from "../../i18n/futureT0";
 
 type PanelState = "loading" | "ready" | "locked" | "error" | "unavailable";
 
 export function QuickPanel() {
-  const [locale, setLocale] = useState("zh-CN");
+  const [locale, setLocale] = useState<Locale>(readCachedLocale);
   const t = getMessages(locale);
   const [theme, setTheme] = useState<string>(readCachedTheme);
   const [animations, setAnimations] = useState(true);
@@ -75,7 +75,9 @@ export function QuickPanel() {
           setMasked(true); setCodes([]); clearCopy();
           const settings = await settingsCommands.get();
           if (!current()) return;
-          setLocale(settings.locale);
+          const nextLocale = isSupportedLocale(settings.locale) ? settings.locale : "zh-CN";
+          setLocale(nextLocale);
+          cacheLocale(nextLocale);
           setTheme(settings.theme === "light" ? "light" : "dark");
           setAnimations(settings.animations !== false);
           blocked.current = settings.hide_codes;

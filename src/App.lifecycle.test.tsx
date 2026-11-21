@@ -35,6 +35,8 @@ function reply(command:string, payload?:{settings?:AppSettings}) {
 const codeCalls = () => ipc.invoke.mock.calls.filter(([command])=>command === "generate_codes");
 async function showCodes() { await screen.findByRole("button", {name:/Add account/});fireEvent.click(screen.getByRole("button",{name:"Codes"}));await screen.findByText("alice"); }
 beforeEach(() => {
+  localStorage.clear();
+  localStorage.setItem("authdesk.locale","en");
   snapshot={locked:false,vault_exists:true,locale:"en",theme:"dark"};
   settings={...defaultSettings,locale:"en"};
   ipc.handlers.clear();
@@ -302,6 +304,7 @@ describe("vault UI boundary", () => {
   });
 
   it.each(["app_snapshot","settings"])("keeps %s failures fail-closed rather than exposing recovery tools", async (failedCommand) => {
+    if (failedCommand === "app_snapshot") localStorage.removeItem("authdesk.locale");
     ipc.invoke.mockImplementation(async (command:string)=>{
       if(command === failedCommand)throw {code:"authentication_failed"};
       return reply(command);
@@ -446,6 +449,7 @@ describe("vault UI boundary", () => {
   });
 
   it("allows retrying a recoverable snapshot error without inventing vault existence", async () => {
+    localStorage.removeItem("authdesk.locale");
     ipc.invoke.mockRejectedValueOnce({code:"storage"});
     render(<App />);
     expect(await screen.findByRole("button",{name:"重试"})).toBeVisible();
@@ -527,7 +531,59 @@ describe("vault UI boundary", () => {
     expect(document.documentElement).toHaveAttribute("data-theme","light");
     expect(document.querySelector(".app-root")).toHaveAttribute("data-theme","light");
     expect(ipc.invoke).not.toHaveBeenCalledWith("settings");
-    localStorage.clear();
+  });
+
+  it("starts locked with the cached language and ignores unauthenticated snapshot locale", async () => {
+    snapshot={locked:true,vault_exists:true,locale:"en",theme:"dark"};
+    localStorage.setItem("authdesk.locale","ja");
+    render(<App />);
+    expect(await screen.findByRole("button",{name:"ロック解除"})).toBeVisible();
+    expect(document.documentElement.lang).toBe("ja");
+    expect(ipc.invoke).not.toHaveBeenCalledWith("settings");
+    act(()=>ipc.handlers.get("vault://locked")?.());
+    expect(document.documentElement.lang).toBe("ja");
+    expect(localStorage.getItem("authdesk.locale")).toBe("ja");
+  });
+
+  it("uses authenticated settings after unlock and migrates the authenticated locale hint", async () => {
+    localStorage.setItem("authdesk.locale","ja");
+    settings={...settings,locale:"en"};
+    render(<App />);
+    expect(await screen.findByRole("button",{name:/Add account/})).toBeVisible();
+    expect(document.documentElement.lang).toBe("en");
+    expect(localStorage.getItem("authdesk.locale")).toBe("en");
+    fireEvent.click(screen.getByRole("button",{name:"Settings"}));
+    fireEvent.change(screen.getByLabelText("Language"),{target:{value:"zh-TW"}});
+    ipc.invoke.mockImplementation(async (command:string,payload?:{settings?:AppSettings})=>{
+      if(command === "save_settings")throw {code:"storage"};
+      return reply(command,payload);
+    });
+    fireEvent.click(screen.getByRole("button",{name:"Save"}));
+    await screen.findByRole("alert");
+    expect(localStorage.getItem("authdesk.locale")).toBe("en");
+  });
+
+  it("does not let a superseded settings save overwrite a newer locale hint", async () => {
+    const pending = deferred<void>();
+    ipc.invoke.mockImplementation(async (command:string,payload?:{settings?:AppSettings})=>{
+      if(command === "save_settings") return pending.promise;
+      return reply(command,payload);
+    });
+    render(<App />);
+    await screen.findByRole("button",{name:/Add account/});
+    fireEvent.click(screen.getByRole("button",{name:"Settings"}));
+    fireEvent.change(screen.getByLabelText("Language"),{target:{value:"ja"}});
+    fireEvent.click(screen.getByRole("button",{name:"Save"}));
+    await waitFor(()=>expect(ipc.invoke).toHaveBeenCalledWith("save_settings",expect.anything()));
+    act(()=>{snapshot.locked=true;ipc.handlers.get("vault://locked")?.();});
+    fireEvent.change(await screen.findByLabelText("Master password"),{target:{value:"long-password"}});
+    fireEvent.click(screen.getByRole("button",{name:"Unlock vault"}));
+    await screen.findByRole("button",{name:"Save"});
+    expect(document.documentElement.lang).toBe("en");
+    expect(localStorage.getItem("authdesk.locale")).toBe("en");
+    await act(async()=>pending.resolve());
+    expect(localStorage.getItem("authdesk.locale")).toBe("en");
+    expect(document.documentElement.lang).toBe("en");
   });
 
   it("remembers a newly saved appearance for the next launch", async () => {
@@ -565,6 +621,7 @@ describe("vault UI boundary", () => {
     fireEvent.click(screen.getByRole("button",{name:"Save"}));
     expect(await screen.findByRole("heading",{name:"環境設定"})).toBeVisible();
     expect(document.documentElement.lang).toBe("ja");
+    expect(localStorage.getItem("authdesk.locale")).toBe("ja");
     expect(ipc.invoke).toHaveBeenCalledWith("save_settings",{settings:expect.objectContaining({locale:"ja"})});
   });
 });

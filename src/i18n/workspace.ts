@@ -93,6 +93,7 @@ const activityLabels = {
     category_saved: "Category saved",
     code_copied: "Code copied",
     hotp_advanced: "Counter advanced",
+    favorite_changed: "Favorite status changed",
     settings_saved: "Settings saved",
   },
   "zh-CN": {
@@ -107,6 +108,7 @@ const activityLabels = {
     category_saved: "已保存分类",
     code_copied: "已复制验证码",
     hotp_advanced: "已推进计数器",
+    favorite_changed: "已更改收藏状态",
     settings_saved: "已保存设置",
   },
   "zh-TW": {
@@ -121,6 +123,7 @@ const activityLabels = {
     category_saved: "已儲存分類",
     code_copied: "已複製驗證碼",
     hotp_advanced: "已推進計數器",
+    favorite_changed: "已變更收藏狀態",
     settings_saved: "已儲存設定",
   },
   ja: {
@@ -135,6 +138,7 @@ const activityLabels = {
     category_saved: "カテゴリを保存",
     code_copied: "コードをコピー",
     hotp_advanced: "カウンターを進めた",
+    favorite_changed: "お気に入り状態を変更",
     settings_saved: "設定を保存",
   },
 } satisfies Record<Locale, Record<string, string>>;

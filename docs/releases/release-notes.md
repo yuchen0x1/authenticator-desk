@@ -1,14 +1,16 @@
 # AUTHENTICATOR DESK release notes
 
-## v0.3.1 (prepared; not published)
+## v0.3.1 (published 2026-11-21)
+
+Published from tag commit `7ae5151e3041487f9e46ac4cec943fbd20553daf` with seven release assets. See the [GitHub release](https://github.com/yuchen0x1/authenticator-desk/releases/tag/v0.3.1). The installers have updater/minisign signatures but no Windows Authenticode publisher certificate. Later source changes do not replace these immutable release assets.
 
 - Bind account-save completion to the originating vault session and dialog lifetime.
 - Initialize edits from authenticated details; keep full HOTP counter precision and block Edit during a local advance.
 - Allow empty optional issuer fields and preserve colons in plain Aegis native account names.
 - Align T0 and expiry time bases in cards and favorites; pin release creation to the verified tag SHA.
-- Includes the unreleased 0.3.0/0.2.1 source below. [Candidate notes, verification and publication boundaries](v0.3.1.md)
+- Includes the 0.3.0/0.2.1 source below, which was not released separately. [Release notes, verification and publication boundaries](v0.3.1.md)
 
-## v0.3.0 (unreleased separately; included in the 0.3.1 candidate)
+## v0.3.0 (not released separately; included in v0.3.1)
 
 - Show session-bound automatic-backup attempts/failures separately from last success, with safe periodic/manual refresh.
 - Isolate future-T0 accounts from other displayed codes and show a localized pending state.

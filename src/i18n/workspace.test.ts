@@ -8,7 +8,7 @@ import type { Locale } from "./index";
 const auditCodes = [
   "account_created", "account_deleted", "account_updated", "accounts_imported",
   "accounts_moved", "accounts_reordered", "backup_restored", "category_deleted",
-  "category_saved", "code_copied", "hotp_advanced", "settings_saved",
+  "category_saved", "code_copied", "favorite_changed", "hotp_advanced", "settings_saved",
 ] as const;
 const locales: Locale[] = ["en", "zh-CN", "zh-TW", "ja"];
 

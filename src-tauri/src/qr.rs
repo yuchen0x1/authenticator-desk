@@ -71,9 +71,10 @@ pub fn decode_qr_bytes(bytes: &[u8]) -> AppResult<Vec<String>> {
 }
 
 #[cfg(feature = "desktop")]
-pub fn pick_qr_image() -> AppResult<Option<Vec<String>>> {
+pub fn pick_qr_image(locale: &str) -> AppResult<Option<Vec<String>>> {
+    let labels = crate::commands::dialog_labels::for_locale(locale);
     let Some(path) = rfd::FileDialog::new()
-        .add_filter("QR image", &["png", "jpg", "jpeg"])
+        .add_filter(labels.qr_image, &["png", "jpg", "jpeg"])
         .pick_file()
     else {
         return Ok(None);

@@ -2,6 +2,14 @@
 
 Updated on 2026-11-21 (Asia/Shanghai). Dated historical acceptance remains in the test report.
 
+## Open dependency security advisory
+
+GitHub Dependabot alert [#3](https://github.com/yuchen0x1/authenticator-desk/security/dependabot/3) remains **open** for [`GHSA-wrw7-89jp-8q8g` / `RUSTSEC-2024-0429`](https://rustsec.org/advisories/RUSTSEC-2024-0429.html): `glib 0.18.5` has an unsound `VariantStrIter` implementation. The Linux GTK/WebKitGTK/tray dependency graph includes this package. It is not present in the `x86_64-pc-windows-msvc` all-features dependency graph; that target-specific observation is not a fix to the lockfile or Linux dependency chain.
+
+On 2026-11-21, an isolated update to compatible Tauri 2.12.7 / Wry 0.57.3 / Tao 0.37.3 still resolved GLib 0.18.5. GTK 0.18 requires GLib `^0.18`, so a standalone GLib bump to 0.20+ cannot satisfy the current graph. Coordinated upstream migration is tracked in [Tauri](https://github.com/tauri-apps/tauri/pull/16170), [Wry](https://github.com/tauri-apps/wry/pull/1843), [tray-icon](https://github.com/tauri-apps/tray-icon/pull/369) and [muda](https://github.com/tauri-apps/muda/pull/403). No unreviewed dependency fork or advisory dismissal is used here.
+
+`cargo audit` classifies this as an `unsound` warning. A successful default audit/CI exit code does **not** establish that this issue is resolved: `cargo audit --deny unsound` still fails. Other dependency upgrade PRs do not fix this advisory. Do not interpret Windows-only qualification as Linux desktop security approval.
+
 ## Encrypted third-party migration formats
 
 - Encrypted Aegis vaults, encrypted 2FAS services, andOTP `.aes`/`.gpg`,
