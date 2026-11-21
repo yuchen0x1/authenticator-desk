@@ -1,6 +1,24 @@
 # AUTHENTICATOR DESK release notes
 
-## v0.2.1 (unreleased)
+## v0.3.1 (prepared; not published)
+
+- Bind account-save completion to the originating vault session and dialog lifetime.
+- Initialize edits from authenticated details; keep full HOTP counter precision and block Edit during a local advance.
+- Allow empty optional issuer fields and preserve colons in plain Aegis native account names.
+- Align T0 and expiry time bases in cards and favorites; pin release creation to the verified tag SHA.
+- Includes the unreleased 0.3.0/0.2.1 source below. [Candidate notes, verification and publication boundaries](v0.3.1.md)
+
+## v0.3.0 (unreleased separately; included in the 0.3.1 candidate)
+
+- Show session-bound automatic-backup attempts/failures separately from last success, with safe periodic/manual refresh.
+- Isolate future-T0 accounts from other displayed codes and show a localized pending state.
+- Require explicit retry/cancel intent after failed secret replacement.
+- Validate legacy numeric import fields strictly without losing 64-bit HOTP precision.
+- Retry clipboard expiry safely using one cancellable worker and bounded backoff.
+- Execute desktop-feature contracts in CI; retain signed release and independent installer gates.
+- Includes the unreleased 0.2.1 safety fixes below. [Release details and known limits](v0.3.0.md)
+
+## v0.2.1 (unreleased separately; included in v0.3.0)
 
 - Limit Vitest to TypeScript test/spec files under `src/`, keeping Node.js test scripts out of the frontend runner.
 - Run the release-context security tests independently with `node --test` in CI.

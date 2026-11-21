@@ -5,7 +5,7 @@ import { AccountCard } from "./AccountCard";
 
 const account: AccountView = { id: "id", issuer: "GitHub", account_name: "alice", algorithm: "SHA1", digits: 6, kind: "totp", period_secs: 30, t0: "0", hotp_counter: "0", category_id: null, tags: [], notes_present: false, favorite: false, sort_order: 0, created_at: "", updated_at: "" };
 const code: CodeView = { account_id: "id", code: "123456", remaining_secs: 12, progress: .6, generated_at: 59, clock_offset_secs: 0, wall_clock_jump: false };
-const labels = { copy: "Copy", edit: "Edit", favorite: "Favorite", unfavorite: "Unfavorite", select: "Select", hotp: "HOTP", advanceHotp: "Next counter", hiddenCode: "Verification code hidden" };
+const labels = { copy: "Copy", edit: "Edit", favorite: "Favorite", unfavorite: "Unfavorite", select: "Select", hotp: "HOTP", advanceHotp: "Next counter", hiddenCode: "Verification code hidden", futureT0: "Not active yet" };
 const actionName = (action: string, name = "alice") => `${action}: GitHub · ${name}`;
 
 beforeEach(() => {
@@ -74,6 +74,22 @@ describe("account code rendering", () => {
     expect(screen.getByRole("button", { name: actionName(labels.copy) })).toBeEnabled();
   });
 
+  it("shows a localized future-T0 status and disables Copy instead of showing a placeholder", () => {
+    const future = { ...account, t0: String(Math.floor(Date.now() / 1000) + 3600) };
+    const props = { ...cardProps(), account: future };
+    const { container } = render(<AccountCard {...props} />);
+    expect(screen.getByText("Not active yet")).toBeVisible();
+    expect(screen.queryByText("123 456")).not.toBeInTheDocument();
+    expect(screen.queryByText("------")).not.toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(container.querySelector(".code-ring")).not.toBeInTheDocument();
+    expect(screen.queryByText("0 s")).not.toBeInTheDocument();
+    const copyButton = screen.getByRole("button", { name: actionName(labels.copy) });
+    expect(copyButton).toBeDisabled();
+    fireEvent.click(copyButton);
+    expect(props.onCopy).not.toHaveBeenCalled();
+  });
+
   it("never initially renders a code that expired while its IPC response was delayed", () => {
     render(<AccountCard {...cardProps()} code={{ ...code, generated_at: Math.floor(Date.now() / 1000) - 12 }} />);
     expect(screen.queryByText("123 456")).not.toBeInTheDocument();
@@ -97,6 +113,20 @@ describe("account code rendering", () => {
     expect(props.onCopy).toHaveBeenCalledWith(account);
     act(() => vi.advanceTimersByTime(12000));
     expect(screen.queryByText("123 456")).not.toBeInTheDocument();
+  });
+
+  it.each([-3600, 3600])("uses the same compensated time for T0 and code expiry with offset %i", (offset) => {
+    const props = cardProps();
+    const wallNow = Math.floor(Date.now() / 1000);
+    const effectiveNow = wallNow - offset;
+    const shifted = {...account, t0:String(effectiveNow - 60)};
+    render(<AccountCard {...props} account={shifted} code={{...props.code, generated_at:effectiveNow, clock_offset_secs:offset}} />);
+    expect(screen.getByText("123 456")).toBeVisible();
+    expect(screen.queryByText(labels.futureT0)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", {name:actionName(labels.copy)}));
+    expect(props.onCopy).toHaveBeenCalledExactlyOnceWith(shifted);
+    act(() => vi.advanceTimersByTime(12000));
+    expect(screen.getByRole("button", {name:actionName(labels.copy)})).toBeDisabled();
   });
 
   it("does not treat HOTP remaining_secs=0 as expired, but blocks advancement while hidden", () => {
@@ -127,6 +157,10 @@ describe("account code rendering", () => {
     expect(advance).toBeDisabled();
     expect(advance).toHaveAttribute("aria-busy", "true");
     expect(copy).toBeDisabled();
+    const edit = screen.getByRole("button", {name:actionName(labels.edit)});
+    expect(edit).toBeDisabled();
+    fireEvent.click(edit);
+    expect(props.onEdit).not.toHaveBeenCalled();
     fireEvent.click(advance);
     fireEvent.click(copy);
     expect(props.onAdvance).not.toHaveBeenCalled();

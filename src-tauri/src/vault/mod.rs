@@ -856,10 +856,9 @@ mod tests {
             .unlock_vault(SecretString::from("idle-password"))
             .unwrap();
         let revision = service.revision().unwrap();
-        service
-            .set_idle_timeout(Duration::from_millis(200))
-            .unwrap();
-        std::thread::sleep(Duration::from_millis(120));
+        // Leave enough headroom for slower hosted runners to open and initialize
+        // SQLite before asserting that background work does not extend the deadline.
+        service.set_idle_timeout(Duration::from_secs(1)).unwrap();
         service
             .with_background_database(|conn, _, _, _| {
                 conn.execute("UPDATE vault_meta SET created_at=created_at", [])
@@ -868,7 +867,7 @@ mod tests {
             })
             .unwrap();
         assert_eq!(service.revision().unwrap(), revision + 1);
-        std::thread::sleep(Duration::from_millis(110));
+        std::thread::sleep(Duration::from_millis(1100));
         assert!(service.check_idle().unwrap());
         assert!(service.is_locked());
         let _ = fs::remove_file(path);

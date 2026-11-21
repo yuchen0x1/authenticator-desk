@@ -127,12 +127,39 @@ pub struct AutoBackupStatus {
     pub interval_hours: u32,
     pub retention: usize,
     pub last_run: Option<i64>,
+    pub last_attempt: Option<i64>,
+    pub last_error: Option<&'static str>,
+}
+
+// Health is session-local, contains no paths or passwords, and never changes
+// the encrypted configuration format understood by older clients.
+struct AutoBackupAttempt {
+    generation: u64,
+    at: i64,
+    error: Option<&'static str>,
+}
+
+fn auto_status(
+    config: Option<&AutoBackupConfig>,
+    attempt: Option<&AutoBackupAttempt>,
+    paused_locked: bool,
+) -> AutoBackupStatus {
+    AutoBackupStatus {
+        enabled: config.is_some_and(|c| c.enabled),
+        paused_locked,
+        interval_hours: config.map_or(24, |c| c.interval_hours),
+        retention: config.map_or(7, |c| c.retention),
+        last_run: config.and_then(|c| (c.last_run > 0).then_some(c.last_run)),
+        last_attempt: attempt.map(|a| a.at),
+        last_error: attempt.and_then(|a| a.error),
+    }
 }
 
 pub struct BackupService {
     vault: Arc<VaultService>,
     pending: Arc<Mutex<Option<PendingRestore>>>,
     preview_epoch: Arc<AtomicU64>,
+    auto_attempt: Mutex<Option<AutoBackupAttempt>>,
 }
 impl BackupService {
     pub fn new(vault: Arc<VaultService>) -> Self {
@@ -153,6 +180,7 @@ impl BackupService {
             vault,
             pending,
             preview_epoch,
+            auto_attempt: Mutex::new(None),
         }
     }
     pub fn clear(&self) -> AppResult<()> {
@@ -436,23 +464,13 @@ impl BackupService {
         if !enabled {
             return self.vault.with_database(true, |conn, key, _, _| {
                 let Some(mut config) = load_auto_config(conn, key)? else {
-                    return Ok(AutoBackupStatus {
-                        enabled: false,
-                        paused_locked: false,
-                        interval_hours: 24,
-                        retention: 7,
-                        last_run: None,
-                    });
+                    *self.auto_attempt.lock().map_err(|_| AppError::Storage)? = None;
+                    return Ok(auto_status(None, None, false));
                 };
                 config.enabled = false;
                 write_auto_config(conn, key, &config)?;
-                Ok(AutoBackupStatus {
-                    enabled: false,
-                    paused_locked: false,
-                    interval_hours: config.interval_hours,
-                    retention: config.retention,
-                    last_run: (config.last_run > 0).then_some(config.last_run),
-                })
+                *self.auto_attempt.lock().map_err(|_| AppError::Storage)? = None;
+                Ok(auto_status(Some(&config), None, false))
             });
         }
         if interval_hours == 0
@@ -495,39 +513,22 @@ impl BackupService {
                 owned_backups,
             };
             write_auto_config(conn, key, &config)?;
-            Ok(AutoBackupStatus {
-                enabled: true,
-                paused_locked: false,
-                interval_hours,
-                retention,
-                last_run: None,
-            })
+            *self.auto_attempt.lock().map_err(|_| AppError::Storage)? = None;
+            Ok(auto_status(Some(&config), None, false))
         })
     }
     pub fn auto_backup_status(&self) -> AppResult<AutoBackupStatus> {
-        match self.read_auto_config() {
-            Ok(Some(c)) => Ok(AutoBackupStatus {
-                enabled: c.enabled,
-                paused_locked: false,
-                interval_hours: c.interval_hours,
-                retention: c.retention,
-                last_run: (c.last_run > 0).then_some(c.last_run),
-            }),
-            Ok(None) => Ok(AutoBackupStatus {
-                enabled: false,
-                paused_locked: false,
-                interval_hours: 24,
-                retention: 7,
-                last_run: None,
-            }),
-            Err(AppError::VaultLocked) => Ok(AutoBackupStatus {
-                enabled: false,
-                paused_locked: true,
-                interval_hours: 24,
-                retention: 7,
-                last_run: None,
-            }),
-            Err(e) => Err(e),
+        let result = self.vault.with_database(false, |conn, key, generation, _| {
+            let config = load_auto_config(conn, key)?;
+            let attempt = self.auto_attempt.lock().map_err(|_| AppError::Storage)?;
+            let current = attempt.as_ref().filter(|a| {
+                a.generation == generation && config.as_ref().is_some_and(|c| c.enabled)
+            });
+            Ok(auto_status(config.as_ref(), current, false))
+        });
+        match result {
+            Err(AppError::VaultLocked) => Ok(auto_status(None, None, true)),
+            other => other,
         }
     }
     pub fn configured_directory(&self) -> AppResult<Option<PathBuf>> {
@@ -536,6 +537,9 @@ impl BackupService {
             .map(|config| config.directory.clone()))
     }
     pub fn run_auto_backup(&self, now: i64) -> AppResult<Option<BackupSummary>> {
+        if now < 0 {
+            return Err(AppError::InvalidInput);
+        }
         let Some((config, expected_generation, expected_revision)) =
             self.read_auto_config_with_state()?
         else {
@@ -543,9 +547,6 @@ impl BackupService {
         };
         if !config.enabled || !backup_due(&config, now) {
             return Ok(None);
-        }
-        if now < 0 {
-            return Err(AppError::InvalidInput);
         }
         self.vault
             .with_background_database(|conn, key, generation, revision| {
@@ -561,52 +562,66 @@ impl BackupService {
                 if !same_auto_config(&config, &latest) {
                     return Err(AppError::Conflict);
                 }
-                if latest.owned_backups.len() >= MAX_BACKUPS {
-                    return Err(AppError::InvalidInput);
-                }
-                let vault_id = get_or_create_vault_identity(conn, key)?;
-                if latest
-                    .vault_id
-                    .as_deref()
-                    .is_some_and(|configured_id| configured_id != vault_id)
-                {
-                    return Err(AppError::Conflict);
-                }
-                latest.vault_id = Some(vault_id.clone());
+                let mut attempt = self.auto_attempt.lock().map_err(|_| AppError::Storage)?;
+                let result = (|| {
+                    if latest.owned_backups.len() >= MAX_BACKUPS {
+                        return Err(AppError::InvalidInput);
+                    }
+                    let vault_id = get_or_create_vault_identity(conn, key)?;
+                    if latest
+                        .vault_id
+                        .as_deref()
+                        .is_some_and(|configured_id| configured_id != vault_id)
+                    {
+                        return Err(AppError::Conflict);
+                    }
+                    latest.vault_id = Some(vault_id.clone());
 
-                let mut payload = snapshot(conn, key)?;
-                payload.vault_id = Some(vault_id.clone());
-                // Check count and byte bounds before publishing a file or invoking
-                // retention, including for data modified since an older backup.
-                format::check_counts(&payload)?;
-                let password = SecretString::from(latest.password.clone());
-                let bytes = encode(&payload, &password)?;
-                let name = format!("authdesk-auto-{now}-{}.authdesk", Uuid::new_v4());
-                let path = latest.directory.join(&name);
-                write_new_atomic(&path, &bytes)?;
-                let digest = Sha256::digest(&bytes).to_vec();
-                latest.owned_backups.push(OwnedAutoBackup {
-                    directory: latest.directory.clone(),
-                    name: name.clone(),
-                    created_at: now,
-                    digest,
-                    vault_id: vault_id.clone(),
+                    let mut payload = snapshot(conn, key)?;
+                    payload.vault_id = Some(vault_id.clone());
+                    // Check count and byte bounds before publishing a file or invoking
+                    // retention, including for data modified since an older backup.
+                    format::check_counts(&payload)?;
+                    let password = SecretString::from(latest.password.clone());
+                    let bytes = encode(&payload, &password)?;
+                    let name = format!("authdesk-auto-{now}-{}.authdesk", Uuid::new_v4());
+                    let path = latest.directory.join(&name);
+                    write_new_atomic(&path, &bytes)?;
+                    let digest = Sha256::digest(&bytes).to_vec();
+                    latest.owned_backups.push(OwnedAutoBackup {
+                        directory: latest.directory.clone(),
+                        name: name.clone(),
+                        created_at: now,
+                        digest,
+                        vault_id: vault_id.clone(),
+                    });
+                    latest.last_run = now;
+                    apply_retention(
+                        &latest.directory,
+                        latest.retention,
+                        &vault_id,
+                        &mut latest.owned_backups,
+                    )?;
+                    write_auto_config(conn, key, &latest)?;
+                    Ok(Some(BackupSummary {
+                        path: path.to_string_lossy().into_owned(),
+                        account_count: payload.accounts.len(),
+                        category_count: payload.categories.len(),
+                        bytes: bytes.len() as u64,
+                        created_at: payload.metadata.created_at.clone(),
+                    }))
+                })();
+                *attempt = Some(AutoBackupAttempt {
+                    generation,
+                    at: now,
+                    error: result.as_ref().err().map(|error| match error {
+                        AppError::Storage => "storage",
+                        AppError::Crypto => "crypto",
+                        AppError::InvalidInput | AppError::InvalidParameters => "invalid_input",
+                        _ => "backup_failed",
+                    }),
                 });
-                latest.last_run = now;
-                apply_retention(
-                    &latest.directory,
-                    latest.retention,
-                    &vault_id,
-                    &mut latest.owned_backups,
-                )?;
-                write_auto_config(conn, key, &latest)?;
-                Ok(Some(BackupSummary {
-                    path: path.to_string_lossy().into_owned(),
-                    account_count: payload.accounts.len(),
-                    category_count: payload.categories.len(),
-                    bytes: bytes.len() as u64,
-                    created_at: payload.metadata.created_at.clone(),
-                }))
+                result
             })
     }
     fn read_auto_config(&self) -> AppResult<Option<AutoBackupConfig>> {

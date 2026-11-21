@@ -42,6 +42,67 @@ beforeEach(() => {
 });
 
 describe("vault UI boundary", () => {
+  it.each(["success", "failure"])("ignores an old account save %s after locking and opening a new session draft", async (outcome) => {
+    const pending = deferred<AccountView>();
+    ipc.invoke.mockImplementation(async (command:string) => command === "create_account" ? pending.promise : reply(command));
+    render(<App />);
+    await showCodes();
+    fireEvent.click(screen.getByRole("button", {name:/Add account/}));
+    fireEvent.change(screen.getByLabelText("Service"), {target:{value:"Old service"}});
+    fireEvent.change(screen.getByLabelText("Account name"), {target:{value:"old draft"}});
+    // Public RFC 4648 vector for "foobar", not an account credential.
+    fireEvent.change(screen.getByLabelText("Secret"), {target:{value:"MZXW6YTBOI"}});
+    fireEvent.click(screen.getByRole("button", {name:"Save"}));
+    await waitFor(() => expect(ipc.invoke).toHaveBeenCalledWith("create_account", expect.anything()));
+    snapshot.locked = true;
+    act(() => ipc.handlers.get("vault://locked")?.());
+    fireEvent.change(await screen.findByLabelText("Master password"), {target:{value:"synthetic-session-password"}});
+    fireEvent.click(screen.getByRole("button", {name:"Unlock vault"}));
+    await screen.findByText("alice");
+    fireEvent.click(screen.getByRole("button", {name:/Add account/}));
+    fireEvent.change(screen.getByLabelText("Account name"), {target:{value:"new session draft"}});
+    const calls = ipc.invoke.mock.calls.filter(([command]) => command === "list_accounts").length;
+    await act(async () => {
+      if (outcome === "success") pending.resolve(account);
+      else pending.reject({code:"vault_locked"});
+    });
+    expect(screen.getByRole("dialog")).toBeVisible();
+    expect(screen.getByLabelText("Account name")).toHaveValue("new session draft");
+    expect(screen.queryByText("Saved")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(ipc.invoke.mock.calls.filter(([command]) => command === "list_accounts")).toHaveLength(calls);
+  });
+
+  it("does not close a newer dialog after recovery within the same vault session", async () => {
+    const pending = deferred<AccountView>();
+    ipc.invoke.mockImplementation(async (command:string) => command === "create_account" ? pending.promise : reply(command));
+    render(<App />);
+    await showCodes();
+    fireEvent.click(screen.getByRole("button", {name:/Add account/}));
+    fireEvent.change(screen.getByLabelText("Service"), {target:{value:"Test service"}});
+    fireEvent.change(screen.getByLabelText("Account name"), {target:{value:"old draft"}});
+    fireEvent.change(screen.getByLabelText("Secret"), {target:{value:"MZXW6YTBOI"}});
+    fireEvent.click(screen.getByRole("button", {name:"Save"}));
+    await waitFor(() => expect(ipc.invoke).toHaveBeenCalledWith("create_account", expect.anything()));
+    ipc.invoke.mockImplementation(async (command:string) => {
+      if (command === "create_account") return pending.promise;
+      if (command === "settings") throw {code:"storage"};
+      return reply(command);
+    });
+    act(() => ipc.handlers.get("settings://changed")?.());
+    const retry = await screen.findByRole("button", {name:"Retry"});
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    ipc.invoke.mockImplementation(async (command:string) => reply(command));
+    fireEvent.click(retry);
+    await screen.findByText("alice");
+    fireEvent.click(screen.getByRole("button", {name:/Add account/}));
+    fireEvent.change(screen.getByLabelText("Account name"), {target:{value:"recovered draft"}});
+    await act(async () => pending.resolve(account));
+    expect(screen.getByRole("dialog")).toBeVisible();
+    expect(screen.getByLabelText("Account name")).toHaveValue("recovered draft");
+    expect(screen.queryByText("Saved")).not.toBeInTheDocument();
+  });
+
   it("removes accounts immediately and rejects late code results after a lock event", async () => {
     const pending=deferred<CodeView[]>();
     ipc.invoke.mockImplementation(async (command:string)=>command === "generate_codes" ? pending.promise : reply(command));

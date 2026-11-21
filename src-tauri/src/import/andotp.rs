@@ -3,7 +3,7 @@ use serde_json::Value;
 use crate::{AppError, AppResult, accounts::AccountInput, otp::decode_base32};
 
 use super::{
-    MigrationItem, MigrationPreview, MigrationAdapter, json_str, json_u64, parse_json,
+    MigrationItem, MigrationPreview, MigrationAdapter, json_optional_u64, json_str, parse_json,
 };
 
 /// Reader for andOTP plain JSON backups and detector for its `.aes` envelope.
@@ -52,10 +52,19 @@ fn map_entry(entry: &Value) -> MigrationItem {
     let mut input = AccountInput::default();
     input.kind = entry_type.to_lowercase();
     input.algorithm = algorithm;
-    input.digits = json_u64(entry, "digits").unwrap_or(6).min(u8::MAX as u64) as u8;
-    input.period_secs = json_u64(entry, "period").unwrap_or(30).min(u32::MAX as u64) as u32;
+    let (Ok(digits), Ok(period_secs)) = (
+        json_optional_u64(entry.get("digits")),
+        json_optional_u64(entry.get("period")),
+    ) else {
+        return invalid("invalid_parameters");
+    };
+    input.digits = digits.unwrap_or(6).min(u8::MAX as u64) as u8;
+    input.period_secs = period_secs.unwrap_or(30).min(u32::MAX as u64) as u32;
     if entry_type == "HOTP" {
-        input.hotp_counter = json_u64(entry, "counter").unwrap_or(0).to_string();
+        let Ok(counter) = json_optional_u64(entry.get("counter")) else {
+            return invalid("invalid_parameters");
+        };
+        input.hotp_counter = counter.unwrap_or(0).to_string();
     }
     if let Some(tags) = entry.get("tags").and_then(Value::as_array) {
         input.tags = tags

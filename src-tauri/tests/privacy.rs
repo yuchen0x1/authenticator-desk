@@ -16,12 +16,16 @@ fn hidden_codes_are_not_returned_and_hotp_is_not_advanced() {
         .vault
         .unlock_vault(SecretString::from("privacy-test-password"))
         .unwrap();
+    // RFC 4226 Appendix D's public test bytes, never a real account credential.
+    let fixture = authenticator_desk_lib::otp::encode_base32(b"12345678901234567890");
     let input: AccountInput = serde_json::from_value(serde_json::json!({
-        "issuer":"Privacy fixture", "account_name":"demo", "secret":"GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", "kind":"hotp", "hotp_counter":"0"
+        "issuer":"Privacy fixture", "account_name":"demo", "secret":fixture.as_str(), "kind":"hotp", "hotp_counter":"0"
     })).unwrap();
     let account = state.accounts.create_account(input).unwrap();
     let ids = vec![account.id.clone()];
-    assert_eq!(state.visible_codes(&ids).unwrap().len(), 1);
+    let visible = state.visible_codes(&ids).unwrap();
+    assert_eq!(visible.len(), 1);
+    assert_eq!(visible[0].code, "755224");
 
     let mut settings = state.accounts.settings().unwrap();
     settings.hide_codes = true;

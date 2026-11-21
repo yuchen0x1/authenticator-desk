@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
+import { accountDialogMessages } from "../../i18n/accountUi";
 import type { AccountInput, AccountView, CategoryView, OtpAlgorithm } from "../../lib/types";
 import { accountCommands } from "../../lib/tauri";
 import { focusDialog, trapDialogFocus } from "../common/dialogFocus";
@@ -11,6 +12,10 @@ export function AccountDialog({ account, categories, defaults, t, onClose, onSav
   const [name, setName] = useState(account?.account_name ?? "");
   const [secret, setSecret] = useState("");
   const secretRef = useRef("");
+  const secretInputRef = useRef<HTMLInputElement>(null);
+  const [replacementPending, setReplacementPending] = useState(false);
+  const replacementPendingRef = useRef(false);
+  const ui = accountDialogMessages(t.secretKeep);
   const [algorithm, setAlgorithm] = useState<OtpAlgorithm>(account?.algorithm ?? defaults.algorithm);
   const [digits, setDigits] = useState(account?.digits ?? defaults.digits);
   const [kind, setKind] = useState(account?.kind ?? "totp");
@@ -36,8 +41,7 @@ export function AccountDialog({ account, categories, defaults, t, onClose, onSav
   useEffect(() => {
     let active = true;
     let loading = false;
-    secretRef.current = "";
-    setSecret("");
+    clearSecretReplacement();
     setDetailsReady(!account);
     setDetailsLoading(Boolean(account));
     setDetailsError(false);
@@ -50,6 +54,21 @@ export function AccountDialog({ account, categories, defaults, t, onClose, onSav
         try {
           const details = await accountCommands.details(account.id);
           if (active) {
+            if (details.account.id !== account.id) throw new Error("Account details mismatch");
+            // The list may predate a HOTP advance or another native-window edit.
+            // Initialize once from the authenticated snapshot, never from later prop refreshes.
+            const latest = details.account;
+            setIssuer(latest.issuer);
+            setName(latest.account_name);
+            setAlgorithm(latest.algorithm);
+            setDigits(latest.digits);
+            setKind(latest.kind);
+            setPeriod(latest.period_secs);
+            setT0(latest.t0);
+            setCounter(latest.hotp_counter);
+            setCategory(latest.category_id ?? "");
+            setTags(latest.tags.join(", "));
+            setFavorite(latest.favorite);
             setNotes(details.notes);
             setDetailsReady(true);
           }
@@ -67,6 +86,7 @@ export function AccountDialog({ account, categories, defaults, t, onClose, onSav
       active = false;
       retryDetails.current = () => {};
       secretRef.current = "";
+      replacementPendingRef.current = false;
     };
   }, [account?.id]);
 
@@ -83,10 +103,23 @@ export function AccountDialog({ account, categories, defaults, t, onClose, onSav
     wasReady.current = detailsReady && !saving;
   }, [saving, detailsLoading, detailsReady, detailsError]);
 
-  function dismiss() {
-    if (savingRef.current) return;
+  function clearSecretReplacement() {
     secretRef.current = "";
     setSecret("");
+    replacementPendingRef.current = false;
+    setReplacementPending(false);
+  }
+
+  function cancelReplacement() {
+    if (savingRef.current) return;
+    clearSecretReplacement();
+    setError("");
+    secretInputRef.current?.focus();
+  }
+
+  function dismiss() {
+    if (savingRef.current) return;
+    clearSecretReplacement();
     onClose();
   }
 
@@ -94,7 +127,12 @@ export function AccountDialog({ account, categories, defaults, t, onClose, onSav
     event.preventDefault();
     if (savingRef.current || !detailsReady) return;
     setError("");
-    if (!issuer.trim() || !name.trim() || (!account && !secretRef.current.trim()) || (kind === "totp" && (!Number.isInteger(period) || period < 1 || period > 86400))) {
+    if (account && replacementPendingRef.current && !secretRef.current.trim()) {
+      setError(ui.secretReplacementRequired);
+      secretInputRef.current?.focus();
+      return;
+    }
+    if (!name.trim() || (!account && !secretRef.current.trim()) || (kind === "totp" && (!Number.isInteger(period) || period < 1 || period > 86400))) {
       setError(t.required);
       return;
     }
@@ -104,6 +142,11 @@ export function AccountDialog({ account, categories, defaults, t, onClose, onSav
       category_id: category || null, tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean), notes, favorite,
     };
     savingRef.current = true;
+    // Keep only the replacement intent when clearing the sensitive input for submission.
+    if (account && payload.secret) {
+      replacementPendingRef.current = true;
+      setReplacementPending(true);
+    }
     secretRef.current = "";
     setSecret("");
     setSaving(true);
@@ -124,9 +167,12 @@ export function AccountDialog({ account, categories, defaults, t, onClose, onSav
         {detailsLoading && <p role="status" className="loading-state">{t.loading}</p>}
         {detailsError && <div className="inline-error" role="alert"><p>{t.detailsLoadError}</p><button type="button" className="button button-subtle" onClick={() => retryDetails.current()}>{t.retry}</button></div>}
         <fieldset className="form-grid mt-5 min-w-0 border-0 p-0" disabled={saving || !detailsReady}>
-          <label>{t.issuer}<input autoFocus value={issuer} onChange={(event) => setIssuer(event.target.value)} maxLength={128} required /></label>
+          <label>{t.issuer}<input autoFocus value={issuer} onChange={(event) => setIssuer(event.target.value)} maxLength={128} /></label>
           <label>{t.accountName}<input value={name} onChange={(event) => setName(event.target.value)} maxLength={256} required /></label>
-          <label className="field-wide">{t.secret}<input type="password" autoComplete="new-password" value={secret} placeholder={account ? t.secretKeep : ""} aria-describedby={account ? "secret-keep-hint" : undefined} onChange={(event) => { secretRef.current = event.target.value; setSecret(event.target.value); }} />{account && <span id="secret-keep-hint">{t.secretKeep}</span>}</label>
+          <div className="field-wide">
+            <label>{t.secret}<input ref={secretInputRef} type="password" autoComplete="new-password" value={secret} placeholder={account && !replacementPending ? t.secretKeep : ""} aria-describedby={account ? "secret-keep-hint" : undefined} onChange={(event) => { secretRef.current = event.target.value; setSecret(event.target.value); }} />{account && <span id="secret-keep-hint">{replacementPending ? ui.secretReplacementRequired : t.secretKeep}</span>}</label>
+            {account && replacementPending && <button type="button" className="button button-subtle mt-2" onClick={cancelReplacement} disabled={saving}>{ui.cancelSecretReplacement}</button>}
+          </div>
           <label>{t.algorithm}<select value={algorithm} onChange={(event) => setAlgorithm(event.target.value as OtpAlgorithm)}><option value="SHA1">SHA-1</option><option value="SHA256">SHA-256</option><option value="SHA512">SHA-512</option></select></label>
           <label>{t.digits}<select value={digits} onChange={(event) => setDigits(Number(event.target.value))}><option>6</option><option>7</option><option>8</option></select></label>
           <label>{t.kind}<select value={kind} onChange={(event) => setKind(event.target.value as "totp" | "hotp")}><option value="totp">{t.totp}</option><option value="hotp">{t.hotp}</option></select></label>

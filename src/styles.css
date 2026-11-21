@@ -148,6 +148,8 @@ input:not([type=checkbox]):not([type=color]),select,textarea { min-height:38px; 
 .quick-panel-row code { font-size:1.08rem; letter-spacing:.08em; font-variant-numeric:tabular-nums; }
 .quick-panel-code { display:grid; justify-items:end; gap:3px; min-width:78px; font-variant-numeric:tabular-nums; }
 .quick-panel-code span { color:var(--muted); font-size:11px; }
+.future-t0-status { color:var(--muted); font-size:var(--type-body); font-weight:400; font-variant-numeric:normal; letter-spacing:normal; line-height:1.3; overflow-wrap:anywhere; }
+.quick-panel-code .future-t0-status { max-width:10rem; text-align:right; }
 .quick-panel-empty { display:grid; min-height:260px; place-items:center; color:var(--muted); text-align:center; }
 .quick-panel-error { color:var(--danger); font-size:12px; }
 .desktop-settings-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px 16px; }

@@ -69,6 +69,21 @@ describe("favorite quick panel lock and visibility lifecycle", () => {
     expect(await screen.findByText("654321")).toBeVisible();
   });
 
+  it.each([-3600, 3600])("keeps a backend-active TOTP usable across T0 with clock offset %i", async (offset) => {
+    state.locked = false;
+    state.settings.mockResolvedValue({locale:"en",hide_codes:false});
+    const effectiveNow = Math.floor(Date.now()/1000) - offset;
+    state.quickPanelAccounts.mockResolvedValue([{...account,t0:String(effectiveNow - 60)}]);
+    state.codes.mockResolvedValue([{...code("654321",effectiveNow),clock_offset_secs:offset}]);
+    render(<QuickPanel />);
+    expect(await screen.findByText("654321")).toBeVisible();
+    expect(screen.queryByText("Not active yet")).not.toBeInTheDocument();
+    const copy = screen.getByRole("button", {name:"Copy code: Example alice"});
+    expect(copy).toBeEnabled();
+    fireEvent.click(copy);
+    await waitFor(() => expect(state.copy).toHaveBeenCalledExactlyOnceWith(account.id,"654321"));
+  });
+
   it("uses the saved language and updates document language", async () => {
     state.locked=false;
     state.settings.mockResolvedValue({locale:"en",hide_codes:false});
@@ -149,6 +164,36 @@ describe("favorite quick panel lock and visibility lifecycle", () => {
     expect(state.codes).toHaveBeenCalledTimes(count);
     fireEvent.click(screen.getByRole("button",{name:"复制验证码: Example alice"}));
     expect(state.copy).not.toHaveBeenCalled();
+  });
+
+  it("shows future TOTP as not active while keeping other OTPs usable", async () => {
+    state.locked=false;
+    state.settings.mockResolvedValue({locale:"en",hide_codes:false});
+    const future={...account,id:"future",account_name:"future",t0:String(BigInt(Math.floor(Date.now()/1000))+3600n)};
+    const hotp={...account,id:"counter",account_name:"counter",kind:"hotp"};
+    state.quickPanelAccounts.mockResolvedValue([future,account,hotp]);
+    state.codes.mockResolvedValue([
+      {...code("111111"),account_id:account.id},
+      {...code("222222"),account_id:hotp.id},
+    ]);
+    render(<QuickPanel />);
+    const futureStatus = await screen.findByText("Not active yet");
+    expect(futureStatus).toBeVisible();
+    expect(futureStatus).toHaveClass("future-t0-status");
+    const futureRow = futureStatus.closest(".quick-panel-row");
+    expect(futureRow).not.toBeNull();
+    expect(futureRow?.querySelector(".quick-panel-code .future-t0-status")).toBe(futureStatus);
+    expect(futureRow?.querySelector(".quick-panel-code span:not(.future-t0-status)")).not.toBeInTheDocument();
+    expect(screen.queryByText("0s")).not.toBeInTheDocument();
+    expect(screen.queryByText("------")).not.toBeInTheDocument();
+    expect(screen.queryByText("654321")).not.toBeInTheDocument();
+    expect(screen.getByRole("button",{name:"Copy code: Example future"})).toBeDisabled();
+    expect(screen.getByText("111111")).toBeVisible();
+    expect(screen.getByText("222222")).toBeVisible();
+    fireEvent.click(screen.getByRole("button",{name:"Copy code: Example future"}));
+    expect(state.copy).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button",{name:"Copy code: Example alice"}));
+    await waitFor(()=>expect(state.copy).toHaveBeenCalledWith(account.id,"111111"));
   });
 
   it("does not show an expired OTP or allow copying when a delayed refresh has expired", async () => {

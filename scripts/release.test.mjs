@@ -18,6 +18,10 @@ describe("stable release promotion",()=>{
 });
 
 describe("release policy wiring",()=>{
+  it("binds release creation to the verified tag commit instead of a moving default branch", async () => {
+    const release = await readFile(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
+    assert.match(release, /gh release create "\$GITHUB_REF_NAME" --verify-tag --target "\$GITHUB_SHA"/);
+  });
   it("requires security and authorization before signed verification and publication",async()=>{
     const release=await readFile(new URL("../.github/workflows/release.yml",import.meta.url),"utf8");
     const ci=await readFile(new URL("../.github/workflows/ci.yml",import.meta.url),"utf8");
@@ -54,6 +58,10 @@ describe("release policy wiring",()=>{
     assert.match(script, /if \(\$InstallerSmoke -and !\$InstallerFamily\)/);
     assert.match(script, /if \(\$InstallerSmoke -and \$InstallerFamily -eq \$bundle\.Family\)/);
     assert.match(script, /verify-install\.ps1 -Installer \$artifact\.FullName -Family \$bundle\.Family/);
+  });
+  it("executes feature-gated desktop contracts instead of only compiling them", async () => {
+    const ci = await readFile(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
+    assert.match(ci, /run: cargo \+1\.99\.1 test --locked --manifest-path src-tauri\/Cargo\.toml --features desktop --test desktop/);
   });
   it("requires cryptographic verification in the actual signed verifier",async()=>{
     const script=await readFile(new URL("./release.mjs",import.meta.url),"utf8");
